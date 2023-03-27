@@ -231,9 +231,18 @@ class JITFunction(KernelInterface[T]):
         for i, arg in enumerate(regular_args):
             if i in self.do_not_specialize:
                 continue
-            specializations += [f'({arg}.data_ptr() % {JITFunction.divisibility} == 0) if hasattr({arg}, "data_ptr") '
+            arg_annotation = self.__annotations__.get(arg, None)
+            if not arg_annotation:
+                specializations += [f'({arg}.data_ptr() % {JITFunction.divisibility} == 0) if hasattr({arg}, "data_ptr") '
                                 f'else ({arg} % {JITFunction.divisibility} == 0, {arg} == 1) if isinstance({arg}, int) '
                                 f'else (False,)']
+            elif arg_annotation == 'torch.Tensor':
+                specializations += [f'({arg}.data_ptr() % {JITFunction.divisibility} == 0)']
+            elif arg_annotation == 'int':
+                specializations += [f'({arg} % {JITFunction.divisibility} == 0, {arg} == 1)']
+            else:
+                specializations += ['(False,)']
+
         spec_keys = ', '.join(specializations)
         grid_args = ','.join([f'"{arg}": {arg}' for arg in self.arg_names])
 
