@@ -247,7 +247,7 @@ class JITFunction(KernelInterface[T]):
         grid_args = ','.join([f'"{arg}": {arg}' for arg in self.arg_names])
 
         src = f"""
-def {self.fn.__name__}({', '.join(self.arg_names)}, grid, num_warps=4, num_stages=3, extern_libs=None, stream=None, warmup=False):
+def {self.fn.__name__}({', '.join(self.arg_names)}, grid, device=None, num_warps=4, num_stages=3, extern_libs=None, stream=None, warmup=False):
     import time
     sig_key =  {sig_keys},
     constexpr_key = {f'{constexpr_keys},' if len(constexpr_keys) > 0 else ()}
@@ -255,7 +255,7 @@ def {self.fn.__name__}({', '.join(self.arg_names)}, grid, num_warps=4, num_stage
     spec_key = {f'{spec_keys},' if len(spec_keys) > 0 else ()}
     end_time = time.time()
     total_time = (end_time - start_time) * 1e6
-    print(total_time)
+    print(f"latency: {{total_time}}")
     key = (version_key, sig_key, constexpr_key, spec_key, num_warps, num_stages, self.debug)
     if not extern_libs is None:
       key = (key, tuple(extern_libs.items()))
@@ -266,8 +266,9 @@ def {self.fn.__name__}({', '.join(self.arg_names)}, grid, num_warps=4, num_stage
     grid_0 = grid[0]
     grid_1 = grid[1] if grid_size > 1 else 1
     grid_2 = grid[2] if grid_size > 2 else 1
-    device = torch.cuda.current_device()
-    torch.cuda.set_device(device)
+    if device is None:
+        device = torch.cuda.current_device()
+        torch.cuda.set_device(device)
     if stream is None and not warmup:
       stream = get_cuda_stream(device)
     try:
