@@ -17,7 +17,6 @@ In doing so, you will learn about:
 import torch
 
 import triton
-import time
 import triton.language as tl
 
 
@@ -68,11 +67,7 @@ def add(x: torch.Tensor, y: torch.Tensor):
     #  - Each torch.tensor object is implicitly converted into a pointer to its first element.
     #  - `triton.jit`'ed functions can be indexed with a launch grid to obtain a callable GPU kernel.
     #  - Don't forget to pass meta-parameters as keywords arguments.
-    start_time = time.time()
     add_kernel[grid](x, y, output, n_elements, BLOCK_SIZE=1024)
-    end_time = time.time()
-    latency = end_time - start_time
-    print("Kernel launch latency: {:.6f} seconds".format(latency))
     # We return a handle to z but, since `torch.cuda.synchronize()` hasn't been called, the kernel is still
     # running asynchronously at this point.
     return output
