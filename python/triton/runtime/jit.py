@@ -248,14 +248,9 @@ class JITFunction(KernelInterface[T]):
 
         src = f"""
 def {self.fn.__name__}({', '.join(self.arg_names)}, grid, device=None, num_warps=4, num_stages=3, extern_libs=None, stream=None, warmup=False):
-    import time
     sig_key =  {sig_keys},
     constexpr_key = {f'{constexpr_keys},' if len(constexpr_keys) > 0 else ()}
-    start_time = time.time()
     spec_key = {f'{spec_keys},' if len(spec_keys) > 0 else ()}
-    end_time = time.time()
-    total_time = (end_time - start_time) * 1e6
-    print(f"latency: {{total_time}}")
     key = (version_key, sig_key, constexpr_key, spec_key, num_warps, num_stages, self.debug)
     if not extern_libs is None:
       key = (key, tuple(extern_libs.items()))

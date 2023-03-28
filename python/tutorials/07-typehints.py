@@ -10,7 +10,7 @@ import torch
 import triton
 
 def define_empty_kernel(file_path, num_tensor_args):
-    arg_str = ",".join([f"arg{i}: torch.Tensor" for i in range(40)])
+    arg_str = ",".join([f"arg{i}: torch.Tensor" for i in range(num_tensor_args)])
     arg_str += ", n_elements: int, BLOCK_SIZE: tl.constexpr"
     func_str = f"""
     import torch
@@ -39,17 +39,19 @@ def empty(*kernel_args: Tuple[torch.Tensor]):
     n_elements = first_arg.numel()
     grid = (triton.cdiv(n_elements, 1024),)
     empty_kernel[grid](*kernel_args, n_elements, BLOCK_SIZE=1024)
-    # torch.cuda.synchronize()
-    # start_time = time.time()
-    # empty_kernel[grid](x, y, output, n_elements, BLOCK_SIZE=1024, device=torch.cuda.current_device())
-    # end_time = time.time()
-    # print(f"Total time = {(end_time - start_time) * 1e6} usec")
+    torch.cuda.synchronize()
+    start_time = time.time()
+    for i in range(1000):
+        empty_kernel[grid](*kernel_args, n_elements, BLOCK_SIZE=1024, device=torch.cuda.current_device())
+    end_time = time.time()
+    print(f"Total time = {(end_time - start_time) * 1e6 / 1000} usec")
 
 file_path = '/tmp/empty_kernel.py'
-define_empty_kernel(file_path, 40)
+num_tensor_args = 40
+define_empty_kernel(file_path, num_tensor_args)
 empty_kernel = import_empty_kernel(file_path)
 
 torch.manual_seed(0)
 size = 98432
-kernel_args = (torch.rand(size, device='cuda') for i in range(40))
+kernel_args = (torch.rand(size, device='cuda') for i in range(num_tensor_args))
 output_triton = empty(*kernel_args)
