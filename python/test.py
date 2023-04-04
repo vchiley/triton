@@ -98,3 +98,38 @@ def test_dot(M, N, K, num_warps, epilogue, allow_tf32, in_dtype, out_dtype, axis
         np.savetxt('np.out', z_ref)
         np.savetxt('triton.out', z_tri.cpu().numpy())
         np.testing.assert_allclose(z_ref, z_tri.cpu().numpy(), rtol=0.01)
+
+@pytest.mark.parametrize("M, N, K, num_warps, epilogue, allow_tf32, in_dtype, out_dtype, axis",
+                         [(*shape_nw, 'softmax', allow_tf32, in_dtype, out_dtype, axis)
+                          for shape_nw in [[128, 16, 16, 4]]
+                          for allow_tf32 in [True]
+                          for in_dtype, out_dtype in [('float32', 'float32')]
+                          for axis in [0]])
+def test_reduce(M, N, K, num_warps, epilogue, allow_tf32, in_dtype, out_dtype, axis, device='cuda'):
+    capability = torch.cuda.get_device_capability()
+
+    # triton kernel
+    @triton.jit
+    def reduce_kernel(X, Z, stride_xm, stride_xn, stride_zm, stride_zn, BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, AXIS: tl.constexpr):
+        off_m = tl.arange(0, BLOCK_M)
+        off_n = tl.arange(0, BLOCK_N)
+        Xs = X + off_m[:, None] * stride_xm + off_n[None, :] * stride_xn
+        Zs = Z + off_n * stride_zn
+        x = tl.load(Xs)
+        z = tl.max(x, AXIS)
+        tl.store(Zs, z)
+    # input
+    rs = RandomState(17)
+    x = rs.randint(0, 4, (M, N)).astype(in_dtype)
+    x_tri = torch.tensor(x, device=device)
+    z = 1 + rs.randint(0, 4, (1, N)).astype(in_dtype)
+    z_tri = torch.tensor(z, device=device)
+
+    pgm = reduce_kernel[(1, 1)](x_tri, z_tri, x_tri.stride(0), x_tri.stride(1), z_tri.stride(0), z_tri.stride(1), M, N, axis)
+    z_ref = x
+    z_ref = np.max(z_ref, axis=axis, keepdims=True)
+
+    # compare
+    # print(z_ref[:,0], z_tri[:,0])
+    # XXX: Somehow there's a larger difference when we use float32
+    np.testing.assert_allclose(z_ref, z_tri.cpu().numpy(), rtol=0.01, atol=1e-3)
