@@ -56,7 +56,6 @@ def test_dot(M, N, K, num_warps, epilogue, allow_tf32, in_dtype, out_dtype, axis
     rs = RandomState(17)
     x = rs.randint(0, 4, (M, K)).astype(in_dtype)
     y = rs.randint(0, 4, (K, N)).astype(in_dtype)
-    w = rs.randint(0, 4, (N, N)).astype(in_dtype)
     w = np.ones((N, N)).astype(in_dtype)
     if in_dtype == 'float32' and allow_tf32:
         x = (x.view('uint32') & np.uint32(0xffffe000)).view('float32')
