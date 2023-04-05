@@ -164,6 +164,20 @@ private:
 
     SmallVector<SmallVector<unsigned>> offset =
         emitOffsetForLayout(srcLayout, srcTy);
+    auto spt = srcLayout.getSizePerThread();
+    auto tpw = srcLayout.getThreadsPerWarp();
+    auto wpc = srcLayout.getWarpsPerCTA();
+    std::cout << "Size Per Thread = " << spt[0] << ", " << spt[1] << std::endl;
+    std::cout << "Threads per warp = " << tpw[0] << ", " << tpw[1] << std::endl;
+    std::cout << "Warps per CTA = " << wpc[0] << ", " << wpc[1] << std::endl;
+    std::cout << "srcElems = " << srcElems << std::endl;
+    std::cout << "offset = " << std::endl;
+    for (const auto &vec : offset) {
+      for (const auto &elem : vec) {
+        std::cout << elem << ", ";
+      }
+      std::cout << std::endl;
+    }
 
     std::map<SmallVector<unsigned>, Value> accs;
     std::map<SmallVector<unsigned>, Value> accIndices;
@@ -174,6 +188,11 @@ private:
       SmallVector<unsigned> key = offset[i];
       key[axis] = 0;
       bool isFirst = accs.find(key) == accs.end();
+      auto threadId = getThreadId(rewriter, loc);
+      mlir::LLVM::vprintf(
+          "tid: %d, value: %f, [%d, %d]",
+          {threadId, srcValues[i], srcIndices[i][0], srcIndices[i][1]},
+          rewriter);
       if (!withIndex) {
         accumulate(rewriter, loc, op.getRedOp(), accs[key], srcValues[i],
                    isFirst);
@@ -204,6 +223,10 @@ private:
 
       writeIdx[axis] = udiv(writeIdx[axis], sizePerThread);
       Value writeOffset = linearize(rewriter, loc, writeIdx, smemShape, srcOrd);
+      auto threadId = getThreadId(rewriter, loc);
+      mlir::LLVM::vprintf(
+          ">tid: %d, writeIdx [%d, %d], writeOffset: %d, acc %f",
+          {threadId, writeIdx[0], writeIdx[1], writeOffset, acc}, rewriter);
       Value writePtr = gep(elemPtrTy, smemBase, writeOffset);
       Value indexWritePtr = gep(indexPtrTy, indexSmemBase, writeOffset);
       store(acc, writePtr);

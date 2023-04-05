@@ -120,7 +120,9 @@ def test_reduce(M, N, K, num_warps, epilogue, allow_tf32, in_dtype, out_dtype, a
         tl.store(Zs, z)
     # input
     rs = RandomState(17)
-    x = rs.randint(0, 4, (M, N)).astype(in_dtype)
+    inc = [[row*N + col for col in range(N)] for row in range(M)]
+    x = np.array(inc).astype(in_dtype)
+    # x = rs.randint(0, 4, (M, N)).astype(in_dtype)
     x_tri = torch.tensor(x, device=device)
     z = 1 + rs.randint(0, 4, (1, N)).astype(in_dtype)
     z_tri = torch.tensor(z, device=device)
