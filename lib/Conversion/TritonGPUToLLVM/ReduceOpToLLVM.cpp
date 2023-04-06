@@ -140,8 +140,12 @@ private:
     bool withIndex = triton::ReduceOp::withIndex(op.getRedOp());
 
     auto srcTy = op.getOperand().getType().cast<RankedTensorType>();
-    auto srcLayout = srcTy.getEncoding().cast<BlockedEncodingAttr>();
-    auto srcOrd = srcLayout.getOrder();
+    auto srcLayout = srcTy.getEncoding();
+    auto srcOrd = triton::gpu::getOrder(srcLayout);
+    auto sizePerThread = triton::gpu::getSizePerThread(srcLayout);
+    auto tpw = triton::gpu::getThreadsPerWarp(srcLayout);
+    auto wpc = triton::gpu::getWarpsPerCTA(srcLayout);
+    auto spc = triton::gpu::getShapePerCTA(srcLayout);
     auto srcShape = srcTy.getShape();
 
     auto llvmElemTy = getTypeConverter()->convertType(srcTy.getElementType());
@@ -164,12 +168,28 @@ private:
 
     SmallVector<SmallVector<unsigned>> offset =
         emitOffsetForLayout(srcLayout, srcTy);
-    auto spt = srcLayout.getSizePerThread();
-    auto tpw = srcLayout.getThreadsPerWarp();
-    auto wpc = srcLayout.getWarpsPerCTA();
-    std::cout << "Size Per Thread = " << spt[0] << ", " << spt[1] << std::endl;
-    std::cout << "Threads per warp = " << tpw[0] << ", " << tpw[1] << std::endl;
-    std::cout << "Warps per CTA = " << wpc[0] << ", " << wpc[1] << std::endl;
+    std::cout << "Size Per Thread = " << sizePerThread[0] << ", "
+              << sizePerThread[1] << std::endl;
+    std::cout << "Threads Per Warp = " << tpw[0] << ", " << tpw[1] << std::endl;
+    std::cout << "Wraps per CTA = " << wpc[0] << ", " << wpc[1] << std::endl;
+    std::cout << "srcOrd = " << srcOrd[0] << ", " << srcOrd[1] << std::endl;
+    std::cout << "Shape Per CTA = " << spc[0] << ", " << spc[1] << std::endl;
+    if (srcLayout.isa<BlockedEncodingAttr>()) {
+      auto blocked = srcTy.getEncoding().cast<BlockedEncodingAttr>();
+      auto spt = blocked.getSizePerThread();
+      auto tpw = blocked.getThreadsPerWarp();
+      auto wpc = blocked.getWarpsPerCTA();
+      std::cout << "Size Per Thread = " << spt[0] << ", " << spt[1]
+                << std::endl;
+      std::cout << "Threads per warp = " << tpw[0] << ", " << tpw[1]
+                << std::endl;
+      std::cout << "Warps per CTA = " << wpc[0] << ", " << wpc[1] << std::endl;
+    }
+    std::cout << "Axis = " << axis << std::endl;
+    std::cout << "SrcShape = " << srcShape[0] << ", " << srcShape[1]
+              << std::endl;
+    std::cout << "Smemshape = " << smemShape[0] << ", " << smemShape[1]
+              << std::endl;
     std::cout << "srcElems = " << srcElems << std::endl;
     std::cout << "offset = " << std::endl;
     for (const auto &vec : offset) {
@@ -190,7 +210,7 @@ private:
       bool isFirst = accs.find(key) == accs.end();
       auto threadId = getThreadId(rewriter, loc);
       mlir::LLVM::vprintf(
-          "tid: %d, value: %f, [%d, %d]",
+          "tid: %d, value: %f, srcIndex: [%d, %d]",
           {threadId, srcValues[i], srcIndices[i][0], srcIndices[i][1]},
           rewriter);
       if (!withIndex) {
@@ -208,10 +228,25 @@ private:
     // cached int32 constants
     std::map<int, Value> ints;
     ints[0] = i32_val(0);
-    for (int N = smemShape[axis] / 2; N > 0; N >>= 1)
+    for (int N = smemShape[axis] / 2; N > 0; N >>= 1) {
       ints[N] = i32_val(N);
-    Value sizePerThread = i32_val(srcLayout.getSizePerThread()[axis]);
+      std::cout << "Caching i32: " << N << std::endl;
+    }
+    std::cout << "Caching i32: " << sizePerThread[axis] << std::endl;
+    Value axisSizePerThread = i32_val(sizePerThread[axis]);
+    // barrier();
+    // for (int i = 0; i < 32; i++) {
+    //   SmallVector<Value> readIdx(2);
+    //   readIdx[0] = i32_val(i);
+    //   readIdx[1] = i32_val(4);
 
+    //   Value readOffset = linearize(rewriter, loc, readIdx, smemShape,
+    //   srcOrd); Value readPtr = gep(elemPtrTy, smemBase, readOffset);
+    //   barrier();
+    //   Value cur = load(readPtr);
+    //   auto threadId = getThreadId(rewriter, loc);
+    //   mlir::LLVM::vprintf("Ztid: %d, cur %f", {threadId, cur}, rewriter);
+    // }
     // reduce across threads
     for (auto it : accs) {
       const SmallVector<unsigned> &key = it.first;
@@ -221,7 +256,7 @@ private:
         accIndex = accIndices[key];
       SmallVector<Value> writeIdx = indices[key];
 
-      writeIdx[axis] = udiv(writeIdx[axis], sizePerThread);
+      writeIdx[axis] = udiv(writeIdx[axis], axisSizePerThread);
       Value writeOffset = linearize(rewriter, loc, writeIdx, smemShape, srcOrd);
       auto threadId = getThreadId(rewriter, loc);
       mlir::LLVM::vprintf(
@@ -244,6 +279,13 @@ private:
         barrier();
         if (!withIndex) {
           Value cur = load(readPtr);
+          auto threadId = getThreadId(rewriter, loc);
+          mlir::LLVM::vprintf(
+              ">>tid: %d, acc %f, cur %f, readIdx [%d, %d], readOffset: %d, "
+              "readMask %d",
+              {threadId, acc, cur, readIdx[0], readIdx[1], readOffset,
+               readMask},
+              rewriter);
           accumulate(rewriter, loc, op.getRedOp(), acc, cur, false);
           barrier();
           store(acc, writePtr);
@@ -280,6 +322,11 @@ private:
         Value readPtr = gep(elemPtrTy, smemBase, readOffset);
         Value indexReadPtr = gep(indexPtrTy, indexSmemBase, readOffset);
         resultVals[i] = withIndex ? load(indexReadPtr) : load(readPtr);
+        auto threadId = getThreadId(rewriter, loc);
+        mlir::LLVM::vprintf(
+            "Result -- tid: %d, res %f, readIdx: [%d, %d], readOffset: %d, ",
+            {threadId, resultVals[i], readIdx[0], readIdx[1], readOffset},
+            rewriter);
       }
       Value ret = getTypeConverter()->packLLElements(loc, resultVals, rewriter,
                                                      resultTy);
@@ -364,7 +411,14 @@ private:
         delinearize(rewriter, loc, laneId, threadsPerWarp, order);
     SmallVector<Value> multiDimWarpId =
         delinearize(rewriter, loc, warpId, warpsPerCTA, order);
-
+    if (srcLayout.isa<MmaEncodingAttr>()) {
+      Value warpId0 = urem(urem(warpId, i32_val(warpsPerCTA[0])),
+                           i32_val(srcShape[0] / 16));
+      Value warpId1 = urem(
+          urem(udiv(warpId, i32_val(warpsPerCTA[0])), i32_val(warpsPerCTA[1])),
+          i32_val(srcShape[1] / 8));
+      multiDimWarpId = {warpId0, warpId1};
+    }
     Value laneIdAxis = multiDimLaneId[axis];
     Value warpIdAxis = multiDimWarpId[axis];
 

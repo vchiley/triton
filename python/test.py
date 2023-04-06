@@ -54,9 +54,14 @@ def test_dot(M, N, K, num_warps, epilogue, allow_tf32, in_dtype, out_dtype, axis
         tl.store(Zs, z)
     # input
     rs = RandomState(17)
-    x = rs.randint(0, 4, (M, K)).astype(in_dtype)
-    y = rs.randint(0, 4, (K, N)).astype(in_dtype)
-    w = np.ones((N, N)).astype(in_dtype)
+    inc = [[row*N + col for col in range(K)] for row in range(M)]
+    ident = [[1 if i == j else 0 for i in range(N)] for j in range(K)]
+    x = np.array(inc).astype(in_dtype)
+    y = np.array(ident).astype(in_dtype)
+    w = np.array(ident).astype(in_dtype)
+    # x = rs.randint(0, 4, (M, K)).astype(in_dtype)
+    # y = rs.randint(0, 4, (K, N)).astype(in_dtype)
+    # w = np.ones((N, N)).astype(in_dtype)
     if in_dtype == 'float32' and allow_tf32:
         x = (x.view('uint32') & np.uint32(0xffffe000)).view('float32')
         y = (y.view('uint32') & np.uint32(0xffffe000)).view('float32')
@@ -87,6 +92,12 @@ def test_dot(M, N, K, num_warps, epilogue, allow_tf32, in_dtype, out_dtype, axis
     z_ref = z_ref - np.max(z_ref, axis=axis, keepdims=True)
     z_ref = z_ref - np.min(z_ref, axis=axis, keepdims=True)
     z_ref = np.matmul(z_ref, w)
+    # import sys
+    # np.set_printoptions(edgeitems=10, linewidth=200, threshold=sys.maxsize)
+    # torch.set_printoptions(edgeitems=10, linewidth=200, threshold=5000)
+    # print(z_ref.astype(int))
+    # print(z_tri)
+    # breakpoint()
     # compare
     # print(z_ref[:,0], z_tri[:,0])
     if in_dtype == 'float32':
