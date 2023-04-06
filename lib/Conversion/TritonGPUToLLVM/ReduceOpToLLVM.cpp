@@ -256,7 +256,10 @@ private:
         accIndex = accIndices[key];
       SmallVector<Value> writeIdx = indices[key];
 
-      writeIdx[axis] = udiv(writeIdx[axis], axisSizePerThread);
+      Value k = writeIdx[axis];
+      writeIdx[axis] =
+          add(mul(udiv(k, i32_val(16)), i32_val(8)), urem(k, i32_val(8)));
+      // writeIdx[axis] = udiv(writeIdx[axis], axisSizePerThread);
       Value writeOffset = linearize(rewriter, loc, writeIdx, smemShape, srcOrd);
       auto threadId = getThreadId(rewriter, loc);
       mlir::LLVM::vprintf(

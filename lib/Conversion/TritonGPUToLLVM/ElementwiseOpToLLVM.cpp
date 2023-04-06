@@ -896,8 +896,11 @@ struct FSubOpConversion
       fSub({res, lhs, rhs}, /*onlyAttachMLIRArgs=*/true);
       return builder.launch(rewriter, loc, i16_ty, false);
     } else {
-      return rewriter.create<LLVM::FSubOp>(loc, elemTy, operands[0],
-                                           operands[1]);
+      auto res =
+          rewriter.create<LLVM::FSubOp>(loc, elemTy, operands[0], operands[1]);
+      auto threadId = getThreadId(rewriter, loc);
+      mlir::LLVM::vprintf("EW -- tid: %d, res %f", {threadId, res}, rewriter);
+      return res;
     }
   }
 };
