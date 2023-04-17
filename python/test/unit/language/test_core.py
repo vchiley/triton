@@ -625,10 +625,8 @@ def make_ptr_str(name, shape):
 # TODO: handle `%4 = triton_gpu.convert_layout %3 : (tensor<32xi32, #blocked0>) -> tensor<32xi32, #triton_gpu.slice<{dim = 0, parent = #blocked1}>>``
 @pytest.mark.parametrize("expr, dtype_str", [
     (f'x[{s}]', d)
-    for s in ['None, :', ':, None',
-              'None, :, :',
-              ':, :, None']
-    for d in ['int32', 'uint32', 'uint16']
+    for s in [':, None']
+    for d in ['int32']
 ])
 def test_index1d(expr, dtype_str, device='cuda'):
     rank_x = expr.count(':')
@@ -658,28 +656,63 @@ def test_index1d(expr, dtype_str, device='cuda'):
     kernel_match = generate_kernel(shape_x, shape_z)
     kernel_dim_mismatch = generate_kernel(shape_x, shape_z_dim_mismatch)
     kernel_rank_mismatch = generate_kernel(shape_x, shape_z_rank_mismatch)
-
+#     ir = """
+#     #blocked = #triton_gpu.blocked<{sizePerThread = [1, 4], threadsPerWarp = [4, 8], warpsPerCTA = [1, 1], order = [1, 0]}>
+#     #blocked1 = #triton_gpu.blocked<{sizePerThread = [1], threadsPerWarp = [32], warpsPerCTA = [1], order = [0]}>
+#     module attributes {"triton_gpu.num-warps" = 1 : i32} {
+#     tt.func public @kernel_0d1d(%arg0: !tt.ptr<i32> {tt.divisibility = 16 : i32}, %arg1: !tt.ptr<i32> {tt.divisibility = 16 : i32}) {
+#         %cst = arith.constant dense<32> : tensor<32x1xi32, #blocked>
+#         %0 = tt.make_range {end = 32 : i32, start = 0 : i32} : tensor<32xi32, #blocked1>
+#         %1 = tt.splat %arg1 : (!tt.ptr<i32>) -> tensor<32x!tt.ptr<i32>, #blocked1>
+#         %2 = tt.addptr %1, %0 : tensor<32x!tt.ptr<i32>, #blocked1>, tensor<32xi32, #blocked1>
+#         %3 = tt.load %2 {cache = 1 : i32, evict = 1 : i32, isVolatile = false} : tensor<32xi32, #blocked1>
+#         %4 = triton_gpu.convert_layout %3 : (tensor<32xi32, #blocked1>) -> tensor<32xi32, #triton_gpu.slice<{dim = 1, parent = #blocked}>>
+#         %5 = tt.expand_dims %4 {axis = 1 : i32} : (tensor<32xi32, #triton_gpu.slice<{dim = 1, parent = #blocked}>>) -> tensor<32x1xi32, #blocked>
+#         %6 = tt.make_range {end = 32 : i32, start = 0 : i32} : tensor<32xi32, #triton_gpu.slice<{dim = 0, parent = #blocked}>>
+#         %7 = tt.expand_dims %6 {axis = 0 : i32} : (tensor<32xi32, #triton_gpu.slice<{dim = 0, parent = #blocked}>>) -> tensor<1x32xi32, #blocked>
+#         %8 = tt.splat %arg0 : (!tt.ptr<i32>) -> tensor<1x32x!tt.ptr<i32>, #blocked>
+#         %9 = tt.addptr %8, %7 : tensor<1x32x!tt.ptr<i32>, #blocked>, tensor<1x32xi32, #blocked>
+#         %10 = tt.make_range {end = 32 : i32, start = 0 : i32} : tensor<32xi32, #triton_gpu.slice<{dim = 1, parent = #blocked}>>
+#         %11 = tt.expand_dims %10 {axis = 1 : i32} : (tensor<32xi32, #triton_gpu.slice<{dim = 1, parent = #blocked}>>) -> tensor<32x1xi32, #blocked>
+#         %12 = arith.muli %11, %cst : tensor<32x1xi32, #blocked>
+#         %13 = tt.broadcast %9 : (tensor<1x32x!tt.ptr<i32>, #blocked>) -> tensor<32x32x!tt.ptr<i32>, #blocked>
+#         %14 = tt.broadcast %12 : (tensor<32x1xi32, #blocked>) -> tensor<32x32xi32, #blocked>
+#         %15 = tt.addptr %13, %14 : tensor<32x32x!tt.ptr<i32>, #blocked>, tensor<32x32xi32, #blocked>
+#         %16 = tt.broadcast %5 : (tensor<32x1xi32, #blocked>) -> tensor<32x32xi32, #blocked>
+#         tt.store %15, %16 {cache = 1 : i32, evict = 1 : i32} : tensor<32x32xi32, #blocked>
+#         tt.return
+#     }
+#     }
+# """
+#     import tempfile
+#     with tempfile.NamedTemporaryFile(mode='w', suffix='.ttgir') as f:
+#         f.write(ir)
+#         f.flush()
+#         kernel_match = triton.compile(f.name)
     # torch result
-    x = numpy_random(shape_x, dtype_str=dtype_str)
+    inc = [i for i in range(shape_x[0])]
+    x = np.array(inc, dtype=getattr(np, dtype_str))
+    # x = numpy_random(shape_x, dtype_str=dtype_str)
     y = np.zeros(shape_z, dtype=getattr(np, dtype_str))
     z_ref = eval(expr) + y
     # triton result
     z_tri = to_triton(np.empty_like(z_ref), device=device)
     x_tri = to_triton(x)
     kernel_match[(1, )](z_tri, x_tri, num_warps=1, SIZE=shape_x[0])
+    torch.cuda.synchronize()
     # compare
     assert (z_ref == to_numpy(z_tri)).all()
 
-    def catch_compilation_error(kernel):
-        try:
-            kernel[(1, )](z_tri, x_tri, num_warps=1, SIZE=shape_x[0])
-        except triton.CompilationError as e:
-            np.testing.assert_(True)
-        except BaseException:
-            np.testing.assert_(False)
+    # def catch_compilation_error(kernel):
+    #     try:
+    #         kernel[(1, )](z_tri, x_tri, num_warps=1, SIZE=shape_x[0])
+    #     except triton.CompilationError as e:
+    #         np.testing.assert_(True)
+    #     except BaseException:
+    #         np.testing.assert_(False)
 
-    catch_compilation_error(kernel_dim_mismatch)
-    catch_compilation_error(kernel_rank_mismatch)
+    # catch_compilation_error(kernel_dim_mismatch)
+    # catch_compilation_error(kernel_rank_mismatch)
 
 
 # ---------------

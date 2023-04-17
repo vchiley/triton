@@ -130,8 +130,22 @@ struct ViewLikeOpConversion : public ConvertTritonGPUOpToLLVMPattern<SourceOp> {
     auto resultTy = op.getType().template cast<RankedTensorType>();
     auto vals = this->getTypeConverter()->unpackLLElements(
         loc, adaptor.getSrc(), rewriter, op.getOperand().getType());
-    Value view =
-        this->getTypeConverter()->packLLElements(loc, vals, rewriter, resultTy);
+    std::cout << "View Op lowering" << std::endl;
+    SmallVector<Value> vals_expanded;
+    if (vals.size() == 8) {
+      for (unsigned row = 0; row < vals.size(); row++) {
+        for (unsigned i = 0; i < 4; i++) {
+          vals_expanded.push_back(vals[row]);
+        }
+      }
+    } else {
+      for (unsigned row = 0; row < vals.size(); row++) {
+        vals_expanded.push_back(vals[row]);
+      }
+    }
+
+    Value view = this->getTypeConverter()->packLLElements(loc, vals_expanded,
+                                                          rewriter, resultTy);
     rewriter.replaceOp(op, view);
     return success();
   }

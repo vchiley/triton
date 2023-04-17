@@ -47,13 +47,26 @@ Value TritonGPUToLLVMTypeConverter::packLLElements(
     Location loc, ValueRange resultVals, ConversionPatternRewriter &rewriter,
     Type type) {
   auto structType = this->convertType(type).dyn_cast<LLVM::LLVMStructType>();
+  if (auto rankedTensor = type.dyn_cast<RankedTensorType>()) {
+    auto layout = rankedTensor.getEncoding();
+    if (auto blockedLayout = layout.dyn_cast<BlockedEncodingAttr>()) {
+      std::cout << "blockedLayout" << std::endl;
+    }
+    if (auto sliceLayout = layout.dyn_cast<SliceEncodingAttr>()) {
+      std::cout << "sliceLayout" << std::endl;
+    }
+  } else {
+    std::cout << "not ranked tensor" << std::endl;
+  }
   if (!structType) {
+    std::cout << "structType is null" << std::endl;
     assert(resultVals.size() == 1);
     return *resultVals.begin();
   }
 
   auto elementTypes = structType.getBody();
   if (elementTypes.size() != resultVals.size()) {
+    std::cout << "Error" << std::endl;
     emitError(loc) << " size mismatch when packing elements for LLVM struct"
                    << " expected " << elementTypes.size() << " but got "
                    << resultVals.size();
@@ -125,6 +138,7 @@ Type TritonGPUToLLVMTypeConverter::getElementTypeForStruct(
 
 Type TritonGPUToLLVMTypeConverter::convertTritonTensorType(
     RankedTensorType type) {
+  std::cout << "Calling convertTritonTensorType" << std::endl;
   auto ctx = type.getContext();
   Attribute layout = type.getEncoding();
   SmallVector<int64_t> shape(type.getShape().begin(), type.getShape().end());
@@ -145,6 +159,7 @@ Type TritonGPUToLLVMTypeConverter::convertTritonTensorType(
   }
 
   unsigned numElementsPerThread = getElemsPerThread(type);
+  std::cout << "numElementsPerThread: " << numElementsPerThread << std::endl;
   SmallVector<Type, 4> types(numElementsPerThread, eltType);
   return LLVM::LLVMStructType::getLiteral(ctx, types);
 }

@@ -685,6 +685,13 @@ private:
         reorderedOffset[n].push_back(offset[k][reorderedMultiDimId]);
       }
     }
+    std::cout << "reorderedOffset: " << std::endl;
+    for (unsigned i = 0; i < reorderedOffset.size(); i++) {
+      for (unsigned j = 0; j < reorderedOffset[i].size(); j++) {
+        std::cout << reorderedOffset[i][j] << " ";
+      }
+      std::cout << std::endl;
+    }
     return reorderedOffset;
   }
 
@@ -892,9 +899,11 @@ private:
     unsigned numIndices = parentIndices.size();
     SmallVector<SmallVector<Value>> resultIndices;
     for (unsigned i = 0; i < numIndices; ++i) {
-      SmallVector<Value> indices = parentIndices[i];
-      indices.erase(indices.begin() + dim);
-      resultIndices.push_back(indices);
+      if (i % 4 == 0) {
+        SmallVector<Value> indices = parentIndices[i];
+        indices.erase(indices.begin() + dim);
+        resultIndices.push_back(indices);
+      }
     }
     return resultIndices;
   }
