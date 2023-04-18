@@ -198,13 +198,9 @@ private:
     SmallVector<unsigned> numCTAs(rank);
     auto shapePerCTA = getShapePerCTA(layout, type.getShape());
     auto order = getOrder(layout);
-    std::cout << "numCTAs : " << numCTAs.size() << std::endl;
     for (unsigned d = 0; d < rank; ++d) {
-      std::cout << numCTAsEachRep[d] << ", " << std::endl;
       numCTAs[d] = ceil<unsigned>(type.getShape()[d], shapePerCTA[d]);
     }
-    std::cout << std::endl;
-    std::cout << "vec = " << vec << std::endl;
     auto elemTy = type.getElementType();
     bool isInt1 = elemTy.isInteger(1);
     bool isPtr = elemTy.isa<triton::PointerType>();
@@ -413,20 +409,17 @@ private:
                    sliceLayout.getParent().cast<MmaEncodingAttr>().isVolta();
     }
 
-    std::cout << "numReplicates: " << std::endl;
     for (unsigned d = 0; d < rank; ++d) {
       unsigned inPerCTA = std::min<unsigned>(shape[d], srcShapePerCTA[d]);
       unsigned outPerCTA = std::min<unsigned>(shape[d], dstShapePerCTA[d]);
       unsigned maxPerCTA = std::max(inPerCTA, outPerCTA);
       numReplicates[d] = ceil<unsigned>(shape[d], maxPerCTA);
-      std::cout << numReplicates[d] << ", ";
       inNumCTAsEachRep[d] = maxPerCTA / inPerCTA;
       outNumCTAsEachRep[d] = maxPerCTA / outPerCTA;
       assert(maxPerCTA % inPerCTA == 0 && maxPerCTA % outPerCTA == 0);
       inNumCTAs[d] = ceil<unsigned>(shape[d], inPerCTA);
       outNumCTAs[d] = ceil<unsigned>(shape[d], outPerCTA);
     }
-    std::cout << std::endl;
     // Potentially we need to store for multiple CTAs in this replication
     auto accumNumReplicates = product<unsigned>(numReplicates);
     // unsigned elems = getElemsPerThread(srcTy);
@@ -438,7 +431,6 @@ private:
 
     unsigned outElems = getElemsPerThread(dstTy);
     auto outOrd = getOrder(dstLayout);
-    std::cout << "Elements Per thread = " << outElems << std::endl;
     SmallVector<Value> outVals(outElems);
 
     for (unsigned repId = 0; repId < accumNumReplicates; ++repId) {

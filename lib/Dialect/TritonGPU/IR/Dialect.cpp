@@ -331,13 +331,10 @@ unsigned BlockedEncodingAttr::getElemsPerThread(ArrayRef<int64_t> shape,
   assert(rank == sizePerThread.size() &&
          "unexpected rank in BlockedEncodingAttr::getElemsPerThread");
   SmallVector<unsigned> elemsPerThread(rank);
-  std::cout << "elemsPerThread = [";
   for (size_t i = 0; i < rank; ++i) {
     unsigned t = sizePerThread[i] * threadsPerWarp[i] * warpsPerCTA[i];
     elemsPerThread[i] = ceil<unsigned>(shape[i], t) * sizePerThread[i];
-    std::cout << elemsPerThread[i] << ", ";
   }
-  std::cout << "]" << std::endl;
   return product<unsigned>(elemsPerThread);
 }
 

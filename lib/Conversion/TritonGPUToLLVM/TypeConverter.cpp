@@ -125,7 +125,6 @@ Type TritonGPUToLLVMTypeConverter::getElementTypeForStruct(
 
 Type TritonGPUToLLVMTypeConverter::convertTritonTensorType(
     RankedTensorType type) {
-  std::cout << "Calling convertTritonTensorType" << std::endl;
   auto ctx = type.getContext();
   Attribute layout = type.getEncoding();
   SmallVector<int64_t> shape(type.getShape().begin(), type.getShape().end());
@@ -146,7 +145,6 @@ Type TritonGPUToLLVMTypeConverter::convertTritonTensorType(
   }
 
   unsigned numElementsPerThread = getElemsPerThread(type);
-  std::cout << "numElementsPerThread: " << numElementsPerThread << std::endl;
   SmallVector<Type, 4> types(numElementsPerThread, eltType);
   return LLVM::LLVMStructType::getLiteral(ctx, types);
 }
