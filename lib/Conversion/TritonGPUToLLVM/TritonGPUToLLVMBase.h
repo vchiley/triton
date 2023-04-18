@@ -521,6 +521,13 @@ public:
           result = emitBaseIndexForMmaLayoutV1(loc, rewriter, mmaLayout, type);
         if (mmaLayout.isAmpere())
           result = emitBaseIndexForMmaLayoutV2(loc, rewriter, mmaLayout, type);
+      } else if (auto sliceLayout = layout.dyn_cast<SliceEncodingAttr>()) {
+        auto parentLayout = sliceLayout.getParent();
+        auto parentShape = sliceLayout.paddedShape(type.getShape());
+        RankedTensorType parentTy = RankedTensorType::get(
+            parentShape, type.getElementType(), parentLayout);
+        result = emitBaseIndexForLayout(loc, rewriter, parentLayout, parentTy);
+        result.erase(result.begin() + sliceLayout.getDim());
       } else {
         llvm_unreachable("unsupported emitBaseIndexForLayout");
       }
@@ -917,8 +924,7 @@ private:
     unsigned dim = sliceLayout.getDim();
     // step 1, delinearize threadId to get the base index
     auto multiDimBase =
-        emitBaseIndexForLayout(loc, rewriter, parentEncoding, parentTy);
-    multiDimBase.erase(multiDimBase.begin() + dim);
+        emitBaseIndexForLayout(loc, rewriter, sliceLayout, type);
     // step 2, get offset of each element
     auto offset = emitOffsetForSliceLayout(sliceLayout, type);
     // step 3, add offset to base, and reorder the sequence of indices to

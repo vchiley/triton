@@ -62,8 +62,9 @@ SmallVector<unsigned> getThreadsPerWarp(Attribute layout) {
   if (auto sliceLayout = layout.dyn_cast<SliceEncodingAttr>()) {
     auto parent = sliceLayout.getParent();
     auto parentThreadsPerWarp = getThreadsPerWarp(parent);
-    SmallVector<unsigned> threadsPerWarp(1);
-    threadsPerWarp[0] = product<unsigned>(parentThreadsPerWarp);
+    SmallVector<unsigned> threadsPerWarp = parentThreadsPerWarp;
+    threadsPerWarp.erase(threadsPerWarp.begin() + sliceLayout.getDim());
+    threadsPerWarp[0] *= parentThreadsPerWarp[sliceLayout.getDim()];
     return threadsPerWarp;
   }
   assert(0 && "getThreadsPerWarp not implemented");
@@ -82,8 +83,9 @@ SmallVector<unsigned> getWarpsPerCTA(Attribute layout) {
   if (auto sliceLayout = layout.dyn_cast<SliceEncodingAttr>()) {
     auto parent = sliceLayout.getParent();
     auto parentWarpsPerCTA = getWarpsPerCTA(parent);
-    SmallVector<unsigned> warpsPerCTA(1);
-    warpsPerCTA[0] = product<unsigned>(parentWarpsPerCTA);
+    SmallVector<unsigned> warpsPerCTA = parentWarpsPerCTA;
+    warpsPerCTA.erase(warpsPerCTA.begin() + sliceLayout.getDim());
+    warpsPerCTA[0] *= parentWarpsPerCTA[sliceLayout.getDim()];
     return warpsPerCTA;
   }
   assert(0 && "getWarpsPerCTA not implemented");
@@ -95,11 +97,9 @@ SmallVector<unsigned> getSizePerThread(Attribute layout) {
     return SmallVector<unsigned>(blockedLayout.getSizePerThread().begin(),
                                  blockedLayout.getSizePerThread().end());
   } else if (auto sliceLayout = layout.dyn_cast<SliceEncodingAttr>()) {
-    auto ret = getSizePerThread(sliceLayout.getParent());
-    // return ret;
-    ret.erase(ret.begin() + sliceLayout.getDim());
-    std::cout << "ret.size() = " << ret.size() << ": " << ret[0] << std::endl;
-    return ret;
+    auto sizePerThread = getSizePerThread(sliceLayout.getParent());
+    sizePerThread.erase(sizePerThread.begin() + sliceLayout.getDim());
+    return sizePerThread;
   } else if (auto mmaLayout = layout.dyn_cast<MmaEncodingAttr>()) {
     if (mmaLayout.isAmpere()) {
       return {2, 2};
@@ -364,16 +364,26 @@ SliceEncodingAttr::paddedShape<int64_t>(ArrayRef<int64_t> shape) const;
 unsigned SliceEncodingAttr::getElemsPerThread(ArrayRef<int64_t> shape,
                                               Type eltTy) const {
   size_t rank = shape.size();
-  assert(rank == 1 &&
-         "unexpected rank in BlockedEncodingAttr::getElemsPerThread");
   auto dim = getDim();
   auto parent = getParent();
   auto parentThreadsPerWarp = getThreadsPerWarp(parent);
   auto parentWarpsPerCTA = getWarpsPerCTA(parent);
   SmallVector<unsigned> elemsPerThread(rank);
-  elemsPerThread[0] = ceil<unsigned>(shape[0], parentThreadsPerWarp[1 - dim] *
-                                                   parentWarpsPerCTA[1 - dim]);
-  return product<unsigned>(elemsPerThread);
+  // Get total number of threads on which we shard
+  // basically, its the total number of threads of the parent layout
+  // divided by the threads on the slice dimension
+  auto parentSize = product<unsigned>(parentThreadsPerWarp) *
+                    product<unsigned>(parentWarpsPerCTA) /
+                    (parentThreadsPerWarp[dim] * parentWarpsPerCTA[dim]);
+  // Get the volume of the tensor
+  unsigned shapeSize = 1;
+  for (unsigned i = 0; i < rank; i++) {
+    shapeSize *= shape[i];
+  }
+  // Elements per thread is just the volume of the tensor divided by
+  // the number of threads on which we shard
+  auto elemsPerThreadProd = ceil<unsigned>(shapeSize, parentSize);
+  return elemsPerThreadProd;
 }
 
 unsigned MmaEncodingAttr::getElemsPerThread(ArrayRef<int64_t> shape,
