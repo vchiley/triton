@@ -130,16 +130,19 @@ struct ViewLikeOpConversion : public ConvertTritonGPUOpToLLVMPattern<SourceOp> {
     auto resultTy = op.getType().template cast<RankedTensorType>();
     auto vals = this->getTypeConverter()->unpackLLElements(
         loc, adaptor.getSrc(), rewriter, op.getOperand().getType());
-    std::cout << "View Op lowering" << std::endl;
+    auto srcType = op.getOperand().getType().template cast<RankedTensorType>();
+    auto repeats = 1;
+    if (auto sliceLayout =
+            srcType.getEncoding().template dyn_cast<SliceEncodingAttr>()) {
+      auto parentLayout = sliceLayout.getParent();
+      auto parentSizePerThread =
+          mlir::triton::gpu::getSizePerThread(parentLayout);
+      repeats = parentSizePerThread[sliceLayout.getDim()];
+    }
+
     SmallVector<Value> vals_expanded;
-    if (vals.size() == 8) {
-      for (unsigned row = 0; row < vals.size(); row++) {
-        for (unsigned i = 0; i < 4; i++) {
-          vals_expanded.push_back(vals[row]);
-        }
-      }
-    } else {
-      for (unsigned row = 0; row < vals.size(); row++) {
+    for (unsigned row = 0; row < vals.size(); row++) {
+      for (unsigned i = 0; i < repeats; i++) {
         vals_expanded.push_back(vals[row]);
       }
     }

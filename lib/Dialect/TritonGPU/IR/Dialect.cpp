@@ -363,27 +363,17 @@ SliceEncodingAttr::paddedShape<int64_t>(ArrayRef<int64_t> shape) const;
 
 unsigned SliceEncodingAttr::getElemsPerThread(ArrayRef<int64_t> shape,
                                               Type eltTy) const {
-  std::cout << "SliceEncodingAttr::getElemsPerThread" << std::endl;
-  if (getDim() == 0)
-    return 4;
-  else
-    return 8;
-  // size_t rank = shape.size();
-  // auto sizePerThread = getSizePerThread();
-  // auto warpsPerCTA = getWarpsPerCTA();
-  // auto threadsPerWarp = getThreadsPerWarp();
-  // assert(rank == sizePerThread.size() &&
-  //        "unexpected rank in SliceEncodingAttr::getElemsPerThread");
-  // SmallVector<unsigned> elemsPerThread(rank);
-  // std::cout << "elemsPerThread = [";
-  // // TODO: fix based on layout.getDim()
-  // for (size_t i = 0; i < rank; ++i) {
-  //   unsigned t = sizePerThread[i] * threadsPerWarp[i] * warpsPerCTA[i];
-  //   elemsPerThread[i] = ceil<unsigned>(shape[i], t) * sizePerThread[i];
-  //   std::cout << elemsPerThread[i] << ", ";
-  // }
-  // std::cout << "]" << std::endl;
-  // return product<unsigned>(elemsPerThread);
+  size_t rank = shape.size();
+  assert(rank == 1 &&
+         "unexpected rank in BlockedEncodingAttr::getElemsPerThread");
+  auto dim = getDim();
+  auto parent = getParent();
+  auto parentThreadsPerWarp = getThreadsPerWarp(parent);
+  auto parentWarpsPerCTA = getWarpsPerCTA(parent);
+  SmallVector<unsigned> elemsPerThread(rank);
+  elemsPerThread[0] = ceil<unsigned>(shape[0], parentThreadsPerWarp[1 - dim] *
+                                                   parentWarpsPerCTA[1 - dim]);
+  return product<unsigned>(elemsPerThread);
 }
 
 unsigned MmaEncodingAttr::getElemsPerThread(ArrayRef<int64_t> shape,

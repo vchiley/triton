@@ -11,7 +11,7 @@
 #include "Utility.h"
 #include "mlir/IR/TypeUtilities.h"
 #include "triton/Analysis/AxisInfo.h"
-
+#include <set>
 using namespace mlir;
 using namespace mlir::triton;
 
@@ -540,6 +540,8 @@ public:
       if (mmaLayout.isAmpere())
         return emitOffsetForMmaLayoutV2(mmaLayout, type);
     }
+    if (auto sliceLayout = layout.dyn_cast<SliceEncodingAttr>())
+      return emitOffsetForSliceLayout(sliceLayout, type);
     llvm_unreachable("unsupported emitOffsetForLayout");
   }
 
@@ -636,6 +638,30 @@ private:
   }
 
   SmallVector<SmallVector<unsigned>>
+  emitOffsetForSliceLayout(const SliceEncodingAttr &sliceLayout,
+                           RankedTensorType type) const {
+    auto parentEncoding = sliceLayout.getParent();
+    unsigned dim = sliceLayout.getDim();
+    auto parentShape = sliceLayout.paddedShape(type.getShape());
+    RankedTensorType parentTy = RankedTensorType::get(
+        parentShape, type.getElementType(), parentEncoding);
+    auto parentOffsets = emitOffsetForLayout(parentEncoding, parentTy);
+
+    unsigned numOffsets = parentOffsets.size();
+    SmallVector<SmallVector<unsigned>> resultOffsets;
+    std::set<SmallVector<unsigned>> unique_offsets;
+    for (unsigned i = 0; i < numOffsets; ++i) {
+      SmallVector<unsigned> offsets = parentOffsets[i];
+      offsets.erase(offsets.begin() + dim);
+      if (unique_offsets.find(offsets) == unique_offsets.end()) {
+        resultOffsets.push_back(offsets);
+        unique_offsets.insert(offsets);
+      }
+    }
+    return resultOffsets;
+  }
+
+  SmallVector<SmallVector<unsigned>>
   emitOffsetForBlockedLayout(const BlockedEncodingAttr &blockedLayout,
                              RankedTensorType type) const {
     auto shape = type.getShape();
@@ -684,13 +710,6 @@ private:
             multiDimNanoTileElemId[k];
         reorderedOffset[n].push_back(offset[k][reorderedMultiDimId]);
       }
-    }
-    std::cout << "reorderedOffset: " << std::endl;
-    for (unsigned i = 0; i < reorderedOffset.size(); i++) {
-      for (unsigned j = 0; j < reorderedOffset[i].size(); j++) {
-        std::cout << reorderedOffset[i][j] << " ";
-      }
-      std::cout << std::endl;
     }
     return reorderedOffset;
   }
@@ -891,21 +910,28 @@ private:
                             const SliceEncodingAttr &sliceLayout,
                             RankedTensorType type) const {
     auto parentEncoding = sliceLayout.getParent();
-    unsigned dim = sliceLayout.getDim();
     auto parentShape = sliceLayout.paddedShape(type.getShape());
     RankedTensorType parentTy = RankedTensorType::get(
         parentShape, type.getElementType(), parentEncoding);
-    auto parentIndices = emitIndices(loc, rewriter, parentEncoding, parentTy);
-    unsigned numIndices = parentIndices.size();
-    SmallVector<SmallVector<Value>> resultIndices;
-    for (unsigned i = 0; i < numIndices; ++i) {
-      if (i % 4 == 0) {
-        SmallVector<Value> indices = parentIndices[i];
-        indices.erase(indices.begin() + dim);
-        resultIndices.push_back(indices);
-      }
-    }
-    return resultIndices;
+
+    unsigned dim = sliceLayout.getDim();
+    // step 1, delinearize threadId to get the base index
+    auto multiDimBase =
+        emitBaseIndexForLayout(loc, rewriter, parentEncoding, parentTy);
+    multiDimBase.erase(multiDimBase.begin() + dim);
+    // step 2, get offset of each element
+    auto offset = emitOffsetForSliceLayout(sliceLayout, type);
+    // step 3, add offset to base, and reorder the sequence of indices to
+    // guarantee that elems in the same sizePerThread are adjacent in order
+    auto shape = type.getShape();
+    unsigned rank = shape.size();
+    unsigned elemsPerThread = offset.size();
+    SmallVector<SmallVector<Value>> multiDimIdx(elemsPerThread,
+                                                SmallVector<Value>(rank));
+    for (unsigned n = 0; n < elemsPerThread; ++n)
+      for (unsigned k = 0; k < rank; ++k)
+        multiDimIdx[n][k] = add(multiDimBase[k], i32_val(offset[n][k]));
+    return multiDimIdx;
   }
 
 protected:

@@ -227,7 +227,6 @@ private:
 
       auto linearCTAId =
           getLinearIndex<unsigned>(multiDimCTAId, numCTAs, order);
-      std::cout << "linearCTAId: " << linearCTAId << std::endl;
       // TODO: This is actually redundant index calculation, we should
       //       consider of caching the index calculation result in case
       //       of performance issue observed.
@@ -263,12 +262,6 @@ private:
                                     loc, i8_ty, rewriter.getI8IntegerAttr(0)));
             else if (isPtr)
               currVal = inttoptr(llvmElemTyOrig, currVal);
-            auto threadId = getThreadId(rewriter, loc);
-            mlir::LLVM::vprintf("tid: %d, value: %d", {threadId, currVal},
-                                rewriter);
-            std::cout << "Index = "
-                      << elemId + linearCTAId * accumSizePerThread + v
-                      << std::endl;
             vals[elemId + linearCTAId * accumSizePerThread + v] = currVal;
           }
         }
