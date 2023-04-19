@@ -64,7 +64,30 @@ SmallVector<unsigned> getThreadsPerWarp(Attribute layout) {
     auto parentThreadsPerWarp = getThreadsPerWarp(parent);
     SmallVector<unsigned> threadsPerWarp = parentThreadsPerWarp;
     threadsPerWarp.erase(threadsPerWarp.begin() + sliceLayout.getDim());
-    threadsPerWarp[0] *= parentThreadsPerWarp[sliceLayout.getDim()];
+    for (unsigned i = 0; i < threadsPerWarp.size(); i++)
+      threadsPerWarp[i] *= parentThreadsPerWarp[sliceLayout.getDim()];
+    return threadsPerWarp;
+  }
+  assert(0 && "getThreadsPerWarp not implemented");
+  return {};
+}
+
+SmallVector<unsigned> getThreadsPerWarpWithUniqueData(Attribute layout) {
+  if (auto blockedLayout = layout.dyn_cast<BlockedEncodingAttr>()) {
+    return SmallVector<unsigned>(blockedLayout.getThreadsPerWarp().begin(),
+                                 blockedLayout.getThreadsPerWarp().end());
+  }
+  if (auto mmaLayout = layout.dyn_cast<MmaEncodingAttr>()) {
+    if (mmaLayout.isVolta())
+      return {4, 8};
+    if (mmaLayout.isAmpere())
+      return {8, 4};
+  }
+  if (auto sliceLayout = layout.dyn_cast<SliceEncodingAttr>()) {
+    auto parent = sliceLayout.getParent();
+    auto parentThreadsPerWarp = getThreadsPerWarpWithUniqueData(parent);
+    SmallVector<unsigned> threadsPerWarp = parentThreadsPerWarp;
+    threadsPerWarp.erase(threadsPerWarp.begin() + sliceLayout.getDim());
     return threadsPerWarp;
   }
   assert(0 && "getThreadsPerWarp not implemented");
@@ -85,7 +108,28 @@ SmallVector<unsigned> getWarpsPerCTA(Attribute layout) {
     auto parentWarpsPerCTA = getWarpsPerCTA(parent);
     SmallVector<unsigned> warpsPerCTA = parentWarpsPerCTA;
     warpsPerCTA.erase(warpsPerCTA.begin() + sliceLayout.getDim());
-    warpsPerCTA[0] *= parentWarpsPerCTA[sliceLayout.getDim()];
+    for (unsigned i = 0; i < warpsPerCTA.size(); i++)
+      warpsPerCTA[i] *= parentWarpsPerCTA[sliceLayout.getDim()];
+    return warpsPerCTA;
+  }
+  assert(0 && "getWarpsPerCTA not implemented");
+  return {};
+}
+
+SmallVector<unsigned> getWarpsPerCTAWithUniqueData(Attribute layout) {
+  if (auto blockedLayout = layout.dyn_cast<BlockedEncodingAttr>()) {
+    return SmallVector<unsigned>(blockedLayout.getWarpsPerCTA().begin(),
+                                 blockedLayout.getWarpsPerCTA().end());
+  }
+  if (auto mmaLayout = layout.dyn_cast<MmaEncodingAttr>()) {
+    return SmallVector<unsigned>(mmaLayout.getWarpsPerCTA().begin(),
+                                 mmaLayout.getWarpsPerCTA().end());
+  }
+  if (auto sliceLayout = layout.dyn_cast<SliceEncodingAttr>()) {
+    auto parent = sliceLayout.getParent();
+    auto parentWarpsPerCTA = getWarpsPerCTAWithUniqueData(parent);
+    SmallVector<unsigned> warpsPerCTA = parentWarpsPerCTA;
+    warpsPerCTA.erase(warpsPerCTA.begin() + sliceLayout.getDim());
     return warpsPerCTA;
   }
   assert(0 && "getWarpsPerCTA not implemented");
@@ -97,6 +141,7 @@ SmallVector<unsigned> getSizePerThread(Attribute layout) {
     return SmallVector<unsigned>(blockedLayout.getSizePerThread().begin(),
                                  blockedLayout.getSizePerThread().end());
   } else if (auto sliceLayout = layout.dyn_cast<SliceEncodingAttr>()) {
+    // TODO: maybe should not be supported
     auto sizePerThread = getSizePerThread(sliceLayout.getParent());
     sizePerThread.erase(sizePerThread.begin() + sliceLayout.getDim());
     return sizePerThread;
@@ -361,26 +406,25 @@ SliceEncodingAttr::paddedShape<int64_t>(ArrayRef<int64_t> shape) const;
 unsigned SliceEncodingAttr::getElemsPerThread(ArrayRef<int64_t> shape,
                                               Type eltTy) const {
   size_t rank = shape.size();
-  auto dim = getDim();
-  auto parent = getParent();
-  auto parentThreadsPerWarp = getThreadsPerWarp(parent);
-  auto parentWarpsPerCTA = getWarpsPerCTA(parent);
+
   SmallVector<unsigned> elemsPerThread(rank);
-  // Get total number of threads on which we shard
-  // basically, its the total number of threads of the parent layout
-  // divided by the threads on the slice dimension
-  auto parentSize = product<unsigned>(parentThreadsPerWarp) *
-                    product<unsigned>(parentWarpsPerCTA) /
-                    (parentThreadsPerWarp[dim] * parentWarpsPerCTA[dim]);
-  // Get the volume of the tensor
-  unsigned shapeSize = 1;
+
+  auto sizePerThread = getSizePerThread(*this);
+  auto threadsPerWarp = getThreadsPerWarpWithUniqueData(*this);
+  auto warpsPerCTA = getWarpsPerCTAWithUniqueData(*this);
+  std::cout << "ElemsPerThread:" << std::endl;
   for (unsigned i = 0; i < rank; i++) {
-    shapeSize *= shape[i];
+    auto t = sizePerThread[i] * threadsPerWarp[i] * warpsPerCTA[i];
+    elemsPerThread[i] = ceil<unsigned>(shape[i], t) * sizePerThread[i];
+    std::cout << elemsPerThread[i] << ", ";
   }
-  // Elements per thread is just the volume of the tensor divided by
-  // the number of threads on which we shard
-  auto elemsPerThreadProd = ceil<unsigned>(shapeSize, parentSize);
-  return elemsPerThreadProd;
+  std::cout << std::endl;
+  if (getParent().isa<MmaEncodingAttr>() &&
+      product<unsigned>(elemsPerThread) == 4) {
+    return 2 * product<unsigned>(elemsPerThread);
+  }
+
+  return product<unsigned>(elemsPerThread);
 }
 
 unsigned MmaEncodingAttr::getElemsPerThread(ArrayRef<int64_t> shape,

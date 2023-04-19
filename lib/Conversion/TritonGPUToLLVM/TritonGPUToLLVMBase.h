@@ -657,8 +657,10 @@ private:
     unsigned numOffsets = parentOffsets.size();
     SmallVector<SmallVector<unsigned>> resultOffsets;
     std::set<SmallVector<unsigned>> unique_offsets;
+    std::cout << "Offsets: " << numOffsets << "\n";
     for (unsigned i = 0; i < numOffsets; ++i) {
       SmallVector<unsigned> offsets = parentOffsets[i];
+      std::cout << offsets[0] << " " << offsets[1] << " " << std::endl;
       offsets.erase(offsets.begin() + dim);
       if (unique_offsets.find(offsets) == unique_offsets.end()) {
         resultOffsets.push_back(offsets);
