@@ -838,11 +838,13 @@ private:
     }
 
     SmallVector<SmallVector<unsigned>> ret;
+    std::cout << "Offsets = " << std::endl;
     for (unsigned x1 : idxN) {   // N
       for (unsigned x0 : idxM) { // M
         SmallVector<unsigned> idx(2);
         idx[0] = x0; // M
         idx[1] = x1; // N
+        std::cout << "(" << x0 << ", " << x1 << ")" << std::endl;
         ret.push_back(std::move(idx));
       }
     }

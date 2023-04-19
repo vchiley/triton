@@ -290,11 +290,94 @@ SmallVector<unsigned> getOrder(Attribute layout) {
     assert(0 && "Unimplemented usage of getOrder");
     return {};
   }
-};
+}
 
 bool isaDistributedLayout(Attribute layout) {
   return layout.isa<BlockedEncodingAttr>() || layout.isa<MmaEncodingAttr>() ||
          layout.isa<SliceEncodingAttr>();
+}
+
+SmallVector<unsigned> getElemsPerThreadBlockedLayout(ArrayRef<int64_t> shape,
+                                                     Type eltTy,
+                                                     Attribute layout) {
+  auto blockedLayout = layout.dyn_cast<BlockedEncodingAttr>();
+  size_t rank = shape.size();
+  auto sizePerThread = blockedLayout.getSizePerThread();
+  auto warpsPerCTA = blockedLayout.getWarpsPerCTA();
+  auto threadsPerWarp = blockedLayout.getThreadsPerWarp();
+  assert(rank == sizePerThread.size() &&
+         "unexpected rank in BlockedEncodingAttr::getElemsPerThread");
+  SmallVector<unsigned> elemsPerThread(rank);
+  for (size_t i = 0; i < rank; ++i) {
+    unsigned t = sizePerThread[i] * threadsPerWarp[i] * warpsPerCTA[i];
+    elemsPerThread[i] = ceil<unsigned>(shape[i], t) * sizePerThread[i];
+  }
+  return elemsPerThread;
+}
+
+SmallVector<unsigned> getElemsPerThreadMmaLayout(ArrayRef<int64_t> shape,
+                                                 Type eltTy, Attribute layout) {
+  auto mmaLayout = layout.dyn_cast<MmaEncodingAttr>();
+  size_t rank = shape.size();
+  assert(rank == 2 && "Unexpected rank of mma layout");
+  assert((mmaLayout.isVolta() || mmaLayout.isAmpere()) &&
+         "Only version 1 and 2 is supported");
+  SmallVector<unsigned> elemsPerThread(rank);
+  if (mmaLayout.isVolta()) {
+    auto [isARow, isBRow, isAVec4, isBVec4, id] =
+        mmaLayout.decodeVoltaLayoutStates();
+    static constexpr std::array<unsigned, 2> fpw{{2, 2}};
+    unsigned packSize0 = (isARow || isAVec4) ? 1 : 2;
+    unsigned packSize1 = (isBRow && !isBVec4) ? 2 : 1;
+    unsigned repM = 2 * packSize0;
+    unsigned repN = 2 * packSize1;
+    unsigned spwM = fpw[0] * 4 * repM;
+    unsigned spwN = fpw[1] * 4 * repN;
+    unsigned wptM = mmaLayout.getWarpsPerCTA()[0];
+    unsigned wptN = mmaLayout.getWarpsPerCTA()[1];
+    unsigned resM = repM * std::max<int>(1, shape[0] / (spwM * wptM));
+    unsigned resN = 2 * repN * std::max<int>(1, shape[1] / (spwN * wptN));
+    elemsPerThread[0] = resM;
+    elemsPerThread[1] = resN;
+  } else if (mmaLayout.isAmpere()) {
+    unsigned elemsCol =
+        ceil<unsigned>(shape[0], 16 * mmaLayout.getWarpsPerCTA()[0]) * 2;
+    unsigned elemsRow =
+        ceil<unsigned>(shape[1], 8 * mmaLayout.getWarpsPerCTA()[1]) * 2;
+    elemsPerThread[0] = elemsCol;
+    elemsPerThread[1] = elemsRow;
+  } else {
+    llvm_unreachable("Unexpected mma version");
+  }
+
+  return elemsPerThread;
+}
+
+SmallVector<unsigned> getElemsPerThreadSliceLayout(ArrayRef<int64_t> shape,
+                                                   Type eltTy,
+                                                   Attribute layout) {
+  auto sliceLayout = layout.dyn_cast<SliceEncodingAttr>();
+  auto parentLayout = sliceLayout.getParent();
+  auto parentShape = sliceLayout.paddedShape(shape);
+  RankedTensorType parentTy =
+      RankedTensorType::get(parentShape, eltTy, parentLayout);
+  SmallVector<unsigned> elemsPerThread;
+  if (parentLayout.isa<BlockedEncodingAttr>())
+    elemsPerThread =
+        getElemsPerThreadBlockedLayout(parentShape, parentTy, parentLayout);
+  else if (parentLayout.isa<MmaEncodingAttr>()) {
+    elemsPerThread =
+        getElemsPerThreadMmaLayout(parentShape, parentTy, parentLayout);
+    std::cout << "Elems per thread: " << elemsPerThread[0] << ", "
+              << elemsPerThread[1] << std::endl;
+  } else if (parentLayout.isa<SliceEncodingAttr>()) {
+    elemsPerThread =
+        getElemsPerThreadSliceLayout(parentShape, parentTy, parentLayout);
+  } else
+    llvm_unreachable("unexpected parent layout");
+
+  elemsPerThread.erase(elemsPerThread.begin() + sliceLayout.getDim());
+  return elemsPerThread;
 }
 
 } // namespace gpu
@@ -367,23 +450,6 @@ SliceEncodingAttr BlockedEncodingAttr::squeeze(int axis) {
   return SliceEncodingAttr::get(getContext(), axis, *this);
 }
 
-SmallVector<unsigned> getElemsPerThreadBlockedLayout(ArrayRef<int64_t> shape,
-                                                     Type eltTy,
-                                                     Attribute layout) {
-  auto blockedLayout = layout.dyn_cast<BlockedEncodingAttr>();
-  size_t rank = shape.size();
-  auto sizePerThread = blockedLayout.getSizePerThread();
-  auto warpsPerCTA = blockedLayout.getWarpsPerCTA();
-  auto threadsPerWarp = blockedLayout.getThreadsPerWarp();
-  assert(rank == sizePerThread.size() &&
-         "unexpected rank in BlockedEncodingAttr::getElemsPerThread");
-  SmallVector<unsigned> elemsPerThread(rank);
-  for (size_t i = 0; i < rank; ++i) {
-    unsigned t = sizePerThread[i] * threadsPerWarp[i] * warpsPerCTA[i];
-    elemsPerThread[i] = ceil<unsigned>(shape[i], t) * sizePerThread[i];
-  }
-  return elemsPerThread;
-}
 unsigned BlockedEncodingAttr::getElemsPerThread(ArrayRef<int64_t> shape,
                                                 Type eltTy) const {
   auto elemsPerThread = getElemsPerThreadBlockedLayout(shape, eltTy, *this);
@@ -409,69 +475,6 @@ template SmallVector<unsigned>
 SliceEncodingAttr::paddedShape<unsigned>(ArrayRef<unsigned> shape) const;
 template SmallVector<int64_t>
 SliceEncodingAttr::paddedShape<int64_t>(ArrayRef<int64_t> shape) const;
-
-SmallVector<unsigned> getElemsPerThreadMmaLayout(ArrayRef<int64_t> shape,
-                                                 Type eltTy, Attribute layout) {
-  auto mmaLayout = layout.dyn_cast<MmaEncodingAttr>();
-  size_t rank = shape.size();
-  assert(rank == 2 && "Unexpected rank of mma layout");
-  assert((mmaLayout.isVolta() || mmaLayout.isAmpere()) &&
-         "Only version 1 and 2 is supported");
-  SmallVector<unsigned> elemsPerThread(rank);
-  if (mmaLayout.isVolta()) {
-    auto [isARow, isBRow, isAVec4, isBVec4, id] =
-        mmaLayout.decodeVoltaLayoutStates();
-    static constexpr std::array<unsigned, 2> fpw{{2, 2}};
-    unsigned packSize0 = (isARow || isAVec4) ? 1 : 2;
-    unsigned packSize1 = (isBRow && !isBVec4) ? 2 : 1;
-    unsigned repM = 2 * packSize0;
-    unsigned repN = 2 * packSize1;
-    unsigned spwM = fpw[0] * 4 * repM;
-    unsigned spwN = fpw[1] * 4 * repN;
-    unsigned wptM = mmaLayout.getWarpsPerCTA()[0];
-    unsigned wptN = mmaLayout.getWarpsPerCTA()[1];
-    unsigned resM = repM * std::max<int>(1, shape[0] / (spwM * wptM));
-    unsigned resN = 2 * repN * std::max<int>(1, shape[1] / (spwN * wptN));
-    elemsPerThread[0] = resM;
-    elemsPerThread[1] = resN;
-  } else if (mmaLayout.isAmpere()) {
-    unsigned elemsCol =
-        ceil<unsigned>(shape[0], 16 * mmaLayout.getWarpsPerCTA()[0]) * 2;
-    unsigned elemsRow =
-        ceil<unsigned>(shape[1], 8 * mmaLayout.getWarpsPerCTA()[1]) * 2;
-    elemsPerThread[0] = elemsRow;
-    elemsPerThread[1] = elemsCol;
-  } else {
-    llvm_unreachable("Unexpected mma version");
-  }
-
-  return elemsPerThread;
-}
-
-SmallVector<unsigned> getElemsPerThreadSliceLayout(ArrayRef<int64_t> shape,
-                                                   Type eltTy,
-                                                   Attribute layout) {
-  auto sliceLayout = layout.dyn_cast<SliceEncodingAttr>();
-  auto parentLayout = sliceLayout.getParent();
-  auto parentShape = sliceLayout.paddedShape(shape);
-  RankedTensorType parentTy =
-      RankedTensorType::get(parentShape, eltTy, parentLayout);
-  SmallVector<unsigned> elemsPerThread;
-  if (parentLayout.isa<BlockedEncodingAttr>())
-    elemsPerThread =
-        getElemsPerThreadBlockedLayout(parentShape, parentTy, parentLayout);
-  else if (parentLayout.isa<MmaEncodingAttr>()) {
-    elemsPerThread =
-        getElemsPerThreadMmaLayout(parentShape, parentTy, parentLayout);
-  } else if (parentLayout.isa<SliceEncodingAttr>()) {
-    elemsPerThread =
-        getElemsPerThreadSliceLayout(parentShape, parentTy, parentLayout);
-  } else
-    llvm_unreachable("unexpected parent layout");
-
-  elemsPerThread.erase(elemsPerThread.begin() + sliceLayout.getDim());
-  return elemsPerThread;
-}
 
 unsigned SliceEncodingAttr::getElemsPerThread(ArrayRef<int64_t> shape,
                                               Type eltTy) const {

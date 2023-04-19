@@ -54,6 +54,7 @@ Value TritonGPUToLLVMTypeConverter::packLLElements(
 
   auto elementTypes = structType.getBody();
   if (elementTypes.size() != resultVals.size()) {
+    std::cout << "Error" << std::endl;
     emitError(loc) << " size mismatch when packing elements for LLVM struct"
                    << " expected " << elementTypes.size() << " but got "
                    << resultVals.size();

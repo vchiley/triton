@@ -132,18 +132,30 @@ struct ViewLikeOpConversion : public ConvertTritonGPUOpToLLVMPattern<SourceOp> {
         loc, adaptor.getSrc(), rewriter, op.getOperand().getType());
     auto srcType = op.getOperand().getType().template cast<RankedTensorType>();
     auto repeats = 1;
+    SmallVector<Value> vals_expanded;
     if (auto sliceLayout =
             srcType.getEncoding().template dyn_cast<SliceEncodingAttr>()) {
       auto parentLayout = sliceLayout.getParent();
-      auto parentSizePerThread =
-          mlir::triton::gpu::getSizePerThread(parentLayout);
-      repeats = parentSizePerThread[sliceLayout.getDim()];
-    }
-
-    SmallVector<Value> vals_expanded;
-    for (unsigned row = 0; row < vals.size(); row++) {
-      for (unsigned i = 0; i < repeats; i++) {
-        vals_expanded.push_back(vals[row]);
+      auto parentShape = sliceLayout.paddedShape(srcType.getShape());
+      RankedTensorType parentTy =
+          RankedTensorType::get(parentShape, srcType, parentLayout);
+      if (auto mmaLayout =
+              parentTy.getEncoding().template dyn_cast<MmaEncodingAttr>()) {
+        repeats = 8;
+        for (unsigned i = 0; i < repeats; i++) {
+          for (unsigned j = 0; j < vals.size(); j++) {
+            vals_expanded.push_back(vals[j]);
+          }
+        }
+      } else {
+        auto parentSizePerThread =
+            mlir::triton::gpu::getSizePerThread(parentLayout);
+        repeats = parentSizePerThread[sliceLayout.getDim()];
+        for (unsigned row = 0; row < vals.size(); row++) {
+          for (unsigned i = 0; i < repeats; i++) {
+            vals_expanded.push_back(vals[row]);
+          }
+        }
       }
     }
 
