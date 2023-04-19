@@ -625,9 +625,10 @@ def make_ptr_str(name, shape):
 # TODO: handle `%4 = triton_gpu.convert_layout %3 : (tensor<32xi32, #blocked0>) -> tensor<32xi32, #triton_gpu.slice<{dim = 0, parent = #blocked1}>>``
 @pytest.mark.parametrize("expr, dtype_str", [
     (f'x[{s}]', d)
-    for s in ['None, :, :']
-    # for s in [':, None']
-    for d in ['int32']
+    for s in ['None, :', ':, None',
+              'None, :, :',
+              ':, :, None']
+    for d in ['int32', 'uint32', 'uint16']
 ])
 def test_index1d(expr, dtype_str, device='cuda'):
     rank_x = expr.count(':')
@@ -659,10 +660,10 @@ def test_index1d(expr, dtype_str, device='cuda'):
     kernel_rank_mismatch = generate_kernel(shape_x, shape_z_rank_mismatch)
     
     # torch result
-    inc = [[i for i in range(shape_x[0])] for j in range(shape_x[0])]
+    # inc = [[i for i in range(shape_x[0])] for j in range(shape_x[0])]
     # inc = [i for i in range(shape_x[0])]
-    x = np.array(inc, dtype=getattr(np, dtype_str))
-    # x = numpy_random(shape_x, dtype_str=dtype_str)
+    # x = np.array(inc, dtype=getattr(np, dtype_str))
+    x = numpy_random(shape_x, dtype_str=dtype_str)
     y = np.zeros(shape_z, dtype=getattr(np, dtype_str))
     z_ref = eval(expr) + y
     # triton result
