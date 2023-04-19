@@ -412,16 +412,10 @@ unsigned SliceEncodingAttr::getElemsPerThread(ArrayRef<int64_t> shape,
   auto sizePerThread = getSizePerThread(*this);
   auto threadsPerWarp = getThreadsPerWarpWithUniqueData(*this);
   auto warpsPerCTA = getWarpsPerCTAWithUniqueData(*this);
-  std::cout << "ElemsPerThread:" << std::endl;
+
   for (unsigned i = 0; i < rank; i++) {
     auto t = sizePerThread[i] * threadsPerWarp[i] * warpsPerCTA[i];
     elemsPerThread[i] = ceil<unsigned>(shape[i], t) * sizePerThread[i];
-    std::cout << elemsPerThread[i] << ", ";
-  }
-  std::cout << std::endl;
-  if (getParent().isa<MmaEncodingAttr>() &&
-      product<unsigned>(elemsPerThread) == 4) {
-    return 2 * product<unsigned>(elemsPerThread);
   }
 
   return product<unsigned>(elemsPerThread);
