@@ -891,13 +891,12 @@ private:
     auto parentIndices = emitIndices(loc, rewriter, parentEncoding, parentTy);
     unsigned numIndices = parentIndices.size();
     SmallVector<SmallVector<Value>> resultIndices;
-    std::cout << "Slice layout:" << std::endl;
-    auto tid = getThreadId(rewriter, loc);
+    // auto tid = getThreadId(rewriter, loc);
     for (unsigned i = 0; i < numIndices; ++i) {
       SmallVector<Value> indices = parentIndices[i];
       indices.erase(indices.begin() + dim);
-      mlir::LLVM::vprintf("[Index] tid: %d, val: %d", {tid, indices[0]},
-                          rewriter);
+      // mlir::LLVM::vprintf("[Index] tid: %d, val: %d", {tid, indices[0]},
+      //                     rewriter);
       resultIndices.push_back(indices);
     }
     return resultIndices;

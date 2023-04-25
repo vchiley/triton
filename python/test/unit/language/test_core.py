@@ -1348,16 +1348,18 @@ def _welford_combine(mean_1, m2_1, weight_1, mean_2, m2_2, weight_2):
 
 def test_make_range(device='cuda'):
     ir = """
+    #blocked = #triton_gpu.blocked<{sizePerThread = [1, 1], threadsPerWarp = [32, 1], warpsPerCTA = [4, 2], order = [0, 1]}>
     #mma = #triton_gpu.mma<{versionMajor = 2, versionMinor = 0, warpsPerCTA = [8, 1]}>
     module attributes {"triton_gpu.num-warps" = 8 : i32} {
-        tt.func public @load_kernel(%arg0: !tt.ptr<i32> {tt.divisibility = 16 : i32}, %arg1: !tt.ptr<i32> {tt.divisibility = 16 : i32}) {
+        tt.func public @load_kernel(%arg0: !tt.ptr<i32> {tt.divisibility = 16 : i32}) {
             %16 = tt.make_range {end = 128 : i32, start = 0 : i32} : tensor<128xi32, #triton_gpu.slice<{dim = 1, parent = #mma}>>
             %26 = tt.expand_dims %16 {axis = 1 : i32} : (tensor<128xi32, #triton_gpu.slice<{dim = 1, parent = #mma}>>) -> tensor<128x1xi32, #mma>
-            %1 = tt.make_range {end = 128 : i32, start = 0 : i32} : tensor<128xi32, #triton_gpu.slice<{dim = 1, parent = #mma}>>
-            %2 = tt.expand_dims %1 {axis = 1 : i32} : (tensor<128xi32, #triton_gpu.slice<{dim = 1, parent = #mma}>>) -> tensor<128x1xi32, #mma>
-            %3 = tt.splat %arg1 : (!tt.ptr<i32>) -> tensor<128x1x!tt.ptr<i32>, #mma>
-            %4 = tt.addptr %3, %2 : tensor<128x1x!tt.ptr<i32>, #mma>, tensor<128x1xi32, #mma>
-            tt.store %4, %26 : tensor<128x1xi32, #mma>
+            %15 = triton_gpu.convert_layout %26 : (tensor<128x1xi32, #mma>) -> tensor<128x1xi32, #blocked>
+            %1 = tt.make_range {end = 128 : i32, start = 0 : i32} : tensor<128xi32, #triton_gpu.slice<{dim = 1, parent = #blocked}>>
+            %2 = tt.expand_dims %1 {axis = 1 : i32} : (tensor<128xi32, #triton_gpu.slice<{dim = 1, parent = #blocked}>>) -> tensor<128x1xi32, #blocked>
+            %3 = tt.splat %arg0 : (!tt.ptr<i32>) -> tensor<128x1x!tt.ptr<i32>, #blocked>
+            %4 = tt.addptr %3, %2 : tensor<128x1x!tt.ptr<i32>, #blocked>, tensor<128x1xi32, #blocked>
+            tt.store %4, %15 {cache = 1 : i32, evict = 1 : i32} : tensor<128x1xi32, #blocked>
             tt.return
         }
     }
@@ -1369,17 +1371,24 @@ def test_make_range(device='cuda'):
         f.flush()
         load_kernel = triton.compile(f.name)
 
+    # @triton.jit
+    # def load_kernel1(X, BLOCK: tl.constexpr):
+    #     xindex = tl.arange(0, BLOCK)
+    #     Xs = X + xindex[:, None]
+    #     xindex = xindex[:, None]
+    #     tl.store(Xs, xindex)
+
     BLOCK = 128
-    x = np.arange(BLOCK, dtype='int32')
-    y = np.zeros((BLOCK, 1), dtype='int32')
+    ref = np.arange(BLOCK, dtype='int32')
+    x = np.zeros((BLOCK, 1), dtype='int32')
     x_tri = torch.tensor(x, device=device)
-    y_tri = torch.tensor(y, device=device)
 
-    pgm = load_kernel[(1, 1, 1)](x_tri, y_tri)
+    pgm = load_kernel[(1, 1, 1)](x_tri)
+    # pgm = load_kernel1[(1, 1, 1)](x_tri, BLOCK, num_warps=8)
     torch.cuda.synchronize()
-    y_ref = x[:, None]
+    x_ref = ref[:, None]
 
-    np.testing.assert_allclose(y_ref, y_tri.cpu().numpy(), rtol=0.01, atol=1e-3)
+    np.testing.assert_allclose(x_ref, x_tri.cpu().numpy(), rtol=0.01, atol=1e-3)
 
 
 def test_load(device='cuda'):
@@ -1438,8 +1447,8 @@ def test_load(device='cuda'):
     #     tl.store(Ys, x)
 
     BLOCK = 128
-    x = np.arange(BLOCK, dtype='float32')
-    y = np.zeros((BLOCK, 1), dtype='float32')
+    x = np.arange(BLOCK, dtype='int32')
+    y = np.zeros((BLOCK, 1), dtype='int32')
     x_tri = torch.tensor(x, device=device)
     y_tri = torch.tensor(y, device=device)
 

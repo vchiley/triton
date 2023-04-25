@@ -149,7 +149,9 @@ struct LoadOpConversion
 
       auto *addrOpr =
           ptxBuilder.newAddrOperand(ptrElems[vecStart], "l", in_off);
-
+      // auto tid = getThreadId(rewriter, loc);
+      // mlir::LLVM::vprintf("tid: %d, val: %p", {tid, ptrElems[vecStart]},
+      //                     rewriter);
       // Define the instruction opcode
       auto &ld = ptxBuilder.create<>("ld")
                      ->o("volatile", op.getIsVolatile())
@@ -236,8 +238,7 @@ struct LoadOpConversion
         Value vecIdx = createIndexAttrConstant(
             rewriter, loc, this->getTypeConverter()->getIndexType(), ii % tmp);
         Value loaded = extract_element(valueElemTy, rets[ii / tmp], vecIdx);
-        auto tid = getThreadId(rewriter, loc);
-        mlir::LLVM::vprintf("tid: %d, val: %f", {tid, loaded}, rewriter);
+        // mlir::LLVM::vprintf("tid: %d, val: %f", {tid, loaded}, rewriter);
         loadedVals.push_back(loaded);
       }
     } // end vec
@@ -305,7 +306,8 @@ struct StoreOpConversion
     auto numElems = tensorTy ? tensorTy.getNumElements() : 1;
     Value mask = int_val(1, 1);
     auto tid = tid_val();
-    mask = and_(mask, icmp_slt(mul(tid, i32_val(1)), i32_val(256)));
+    mask = and_(mask,
+                icmp_slt(mul(tid, i32_val(elemsPerThread)), i32_val(numElems)));
 
     const size_t dtsize =
         std::max<int>(1, valueElemTy.getIntOrFloatBitWidth() / 8);
@@ -313,6 +315,7 @@ struct StoreOpConversion
 
     const int numVecs = elemsPerThread / vec;
     for (size_t vecStart = 0; vecStart < elemsPerThread; vecStart += vec) {
+      std::cout << "VecStart: " << vecStart << std::endl;
       // TODO: optimization when ptr is AddPtr with constant offset
       size_t in_off = 0;
 
@@ -331,19 +334,22 @@ struct StoreOpConversion
 
       SmallVector<std::pair<Value, std::string>> asmArgs;
       for (size_t wordIdx = 0; wordIdx < nWords; ++wordIdx) {
+        std::cout << "wordIdx: " << wordIdx << std::endl;
         // llWord is a width-len composition
         Value llWord = undef(wordTy);
         // Insert each value element to the composition
         for (size_t elemIdx = 0; elemIdx < wordNElems; ++elemIdx) {
+          std::cout << "elemIdx: " << elemIdx << std::endl;
           const size_t elemOffset = vecStart + wordIdx * wordNElems + elemIdx;
           assert(elemOffset < valueElems.size());
           Value elem = valueElems[elemOffset];
           if (elem.getType().isInteger(1))
             elem = sext(i8_ty, elem);
           elem = bitcast(elem, valueElemTy);
-          auto tid = getThreadId(rewriter, loc);
-          mlir::LLVM::vprintf("Store - tid: %d, val: %f", {tid, elem},
-                              rewriter);
+          // std::cout << "Just before!!!" << std::endl;
+          // auto tid = getThreadId(rewriter, loc);
+          // mlir::LLVM::vprintf("Store - tid: %d, val: %f", {tid, elem},
+          //                     rewriter);
           llWord = insert_element(wordTy, llWord, elem, i32_val(elemIdx));
         }
         llWord = bitcast(llWord, valArgTy);
@@ -360,8 +366,8 @@ struct StoreOpConversion
 
       auto *asmAddr =
           ptxBuilder.newAddrOperand(ptrElems[vecStart], "l", in_off);
-      mlir::LLVM::vprintf("Store - tid: %d, addr: %p",
-                          {tid, ptrElems[vecStart]}, rewriter);
+      // mlir::LLVM::vprintf("Store - tid: %d, addr: %p",
+      //                     {tid, ptrElems[vecStart]}, rewriter);
       auto &ptxStoreInstr =
           ptxBuilder.create<>("st")->global().v(nWords).b(width);
       ptxStoreInstr(asmAddr, asmArgList).predicate(maskVal, "b");

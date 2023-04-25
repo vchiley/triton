@@ -366,12 +366,12 @@ struct MakeRangeOpConversion
     // TODO: slice layout has more elements than expected.
     // Unexpected behavior for make range, but generally OK when followed by
     // expand dims + broadcast. very weird behavior otherwise potentially.
-    auto tid = getThreadId(rewriter, loc);
+    // auto tid = getThreadId(rewriter, loc);
     for (const auto &multiDim : llvm::enumerate(idxs)) {
       assert(multiDim.value().size() == 1);
       retVals[multiDim.index()] = add(multiDim.value()[0], start);
-      mlir::LLVM::vprintf("MakeRange - tid = %d, val = %d\n",
-                          {tid, retVals[multiDim.index()]}, rewriter);
+      // mlir::LLVM::vprintf("MakeRange - tid = %d, val = %d\n",
+      //                     {tid, retVals[multiDim.index()]}, rewriter);
     }
     Value result =
         getTypeConverter()->packLLElements(loc, retVals, rewriter, rankedTy);

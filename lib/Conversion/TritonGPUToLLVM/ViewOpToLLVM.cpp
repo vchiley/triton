@@ -130,6 +130,10 @@ struct ViewLikeOpConversion : public ConvertTritonGPUOpToLLVMPattern<SourceOp> {
     auto resultTy = op.getType().template cast<RankedTensorType>();
     auto vals = this->getTypeConverter()->unpackLLElements(
         loc, adaptor.getSrc(), rewriter, op.getOperand().getType());
+    // auto tid = this->getThreadId(rewriter, loc);
+    // for (const auto &v : llvm::enumerate(vals)) {
+    //   mlir::LLVM::vprintf("view %d: %d\n", {tid, v.value()}, rewriter);
+    // }
     Value view =
         this->getTypeConverter()->packLLElements(loc, vals, rewriter, resultTy);
     rewriter.replaceOp(op, view);
