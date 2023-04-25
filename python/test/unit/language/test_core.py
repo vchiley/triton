@@ -1345,6 +1345,7 @@ def _welford_combine(mean_1, m2_1, weight_1, mean_2, m2_2, weight_2):
         new_weight,
     )
 
+
 def test_make_range(device='cuda'):
     ir = """
     #mma = #triton_gpu.mma<{versionMajor = 2, versionMinor = 0, warpsPerCTA = [8, 1]}>
@@ -1369,7 +1370,7 @@ def test_make_range(device='cuda'):
         load_kernel = triton.compile(f.name)
 
     BLOCK = 128
-    x = np.arange(BLOCK, dtype='int32')#[i for i in range(BLOCK)]
+    x = np.arange(BLOCK, dtype='int32')
     y = np.zeros((BLOCK, 1), dtype='int32')
     x_tri = torch.tensor(x, device=device)
     y_tri = torch.tensor(y, device=device)
@@ -1426,7 +1427,7 @@ def test_load(device='cuda'):
         f.write(ir)
         f.flush()
         load_kernel = triton.compile(f.name)
-    
+
     # @triton.jit
     # def load_kernel1(X, Y, BLOCK: tl.constexpr):
     #     xindex = tl.arange(0, BLOCK)
@@ -1437,7 +1438,7 @@ def test_load(device='cuda'):
     #     tl.store(Ys, x)
 
     BLOCK = 128
-    x = np.arange(BLOCK, dtype='float32')#[i for i in range(BLOCK)]
+    x = np.arange(BLOCK, dtype='float32')
     y = np.zeros((BLOCK, 1), dtype='float32')
     x_tri = torch.tensor(x, device=device)
     y_tri = torch.tensor(y, device=device)
@@ -1448,6 +1449,7 @@ def test_load(device='cuda'):
     y_ref = x[:, None]
 
     np.testing.assert_allclose(y_ref, y_tri.cpu().numpy(), rtol=0.01, atol=1e-3)
+
 
 def test_generic_reduction(device='cuda'):
 
