@@ -75,7 +75,8 @@ struct LoadOpConversion
     unsigned numElems = getTotalElemsPerThread(ptr.getType());
     if (llMask)
       vec = std::min<size_t>(vec, getMaskAlignment(mask));
-
+    std::cout << "Vec = " << vec << std::endl;
+    vec = 1;
     // Get the LLVM values for pointers
     auto ptrElems = getTypeConverter()->unpackLLElements(loc, llPtr, rewriter,
                                                          ptr.getType());
@@ -235,6 +236,8 @@ struct LoadOpConversion
         Value vecIdx = createIndexAttrConstant(
             rewriter, loc, this->getTypeConverter()->getIndexType(), ii % tmp);
         Value loaded = extract_element(valueElemTy, rets[ii / tmp], vecIdx);
+        auto tid = getThreadId(rewriter, loc);
+        mlir::LLVM::vprintf("tid: %d, val: %f", {tid, loaded}, rewriter);
         loadedVals.push_back(loaded);
       }
     } // end vec
@@ -277,7 +280,8 @@ struct StoreOpConversion
 
     unsigned vec = getVectorSize(ptr);
     unsigned elemsPerThread = getTotalElemsPerThread(ptr.getType());
-
+    std::cout << "Store: elemsPerThread: " << elemsPerThread << ", "
+              << "vec: " << vec << std::endl;
     auto ptrElems = getTypeConverter()->unpackLLElements(loc, llPtr, rewriter,
                                                          ptr.getType());
     auto valueElems = getTypeConverter()->unpackLLElements(
@@ -301,8 +305,7 @@ struct StoreOpConversion
     auto numElems = tensorTy ? tensorTy.getNumElements() : 1;
     Value mask = int_val(1, 1);
     auto tid = tid_val();
-    mask = and_(mask,
-                icmp_slt(mul(tid, i32_val(elemsPerThread)), i32_val(numElems)));
+    mask = and_(mask, icmp_slt(mul(tid, i32_val(1)), i32_val(256)));
 
     const size_t dtsize =
         std::max<int>(1, valueElemTy.getIntOrFloatBitWidth() / 8);
@@ -338,7 +341,9 @@ struct StoreOpConversion
           if (elem.getType().isInteger(1))
             elem = sext(i8_ty, elem);
           elem = bitcast(elem, valueElemTy);
-
+          auto tid = getThreadId(rewriter, loc);
+          mlir::LLVM::vprintf("Store - tid: %d, val: %f", {tid, elem},
+                              rewriter);
           llWord = insert_element(wordTy, llWord, elem, i32_val(elemIdx));
         }
         llWord = bitcast(llWord, valArgTy);
@@ -355,7 +360,8 @@ struct StoreOpConversion
 
       auto *asmAddr =
           ptxBuilder.newAddrOperand(ptrElems[vecStart], "l", in_off);
-
+      mlir::LLVM::vprintf("Store - tid: %d, addr: %p",
+                          {tid, ptrElems[vecStart]}, rewriter);
       auto &ptxStoreInstr =
           ptxBuilder.create<>("st")->global().v(nWords).b(width);
       ptxStoreInstr(asmAddr, asmArgList).predicate(maskVal, "b");
