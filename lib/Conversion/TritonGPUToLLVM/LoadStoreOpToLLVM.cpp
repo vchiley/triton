@@ -76,7 +76,6 @@ struct LoadOpConversion
     if (llMask)
       vec = std::min<size_t>(vec, getMaskAlignment(mask));
     std::cout << "Vec = " << vec << std::endl;
-    vec = 1;
     // Get the LLVM values for pointers
     auto ptrElems = getTypeConverter()->unpackLLElements(loc, llPtr, rewriter,
                                                          ptr.getType());
@@ -315,7 +314,6 @@ struct StoreOpConversion
 
     const int numVecs = elemsPerThread / vec;
     for (size_t vecStart = 0; vecStart < elemsPerThread; vecStart += vec) {
-      std::cout << "VecStart: " << vecStart << std::endl;
       // TODO: optimization when ptr is AddPtr with constant offset
       size_t in_off = 0;
 
@@ -334,19 +332,16 @@ struct StoreOpConversion
 
       SmallVector<std::pair<Value, std::string>> asmArgs;
       for (size_t wordIdx = 0; wordIdx < nWords; ++wordIdx) {
-        std::cout << "wordIdx: " << wordIdx << std::endl;
         // llWord is a width-len composition
         Value llWord = undef(wordTy);
         // Insert each value element to the composition
         for (size_t elemIdx = 0; elemIdx < wordNElems; ++elemIdx) {
-          std::cout << "elemIdx: " << elemIdx << std::endl;
           const size_t elemOffset = vecStart + wordIdx * wordNElems + elemIdx;
           assert(elemOffset < valueElems.size());
           Value elem = valueElems[elemOffset];
           if (elem.getType().isInteger(1))
             elem = sext(i8_ty, elem);
           elem = bitcast(elem, valueElemTy);
-          // std::cout << "Just before!!!" << std::endl;
           // auto tid = getThreadId(rewriter, loc);
           // mlir::LLVM::vprintf("Store - tid: %d, val: %f", {tid, elem},
           //                     rewriter);
