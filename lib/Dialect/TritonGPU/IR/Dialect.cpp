@@ -1218,8 +1218,9 @@ LogicalResult ConvertLayoutOp::canonicalize(ConvertLayoutOp op,
   // cvt(type, constant) -> constant
   if (auto cst = llvm::dyn_cast<arith::ConstantOp>(arg))
     if (auto ret = cst.getValue().dyn_cast<SplatElementsAttr>()) {
-      auto newRet = SplatElementsAttr::get(op->getResultTypes().front(),
-                                           ret.getSplatValue<Attribute>());
+      auto newRet =
+          SplatElementsAttr::get(cast<ShapedType>(op->getResultTypes().front()),
+                                 ret.getSplatValue<Attribute>());
       rewriter.replaceOpWithNewOp<arith::ConstantOp>(op, newRet);
       return mlir::success();
     }

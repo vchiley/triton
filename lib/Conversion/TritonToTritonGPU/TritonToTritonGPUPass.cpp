@@ -68,14 +68,14 @@ public:
                   ConversionPatternRewriter &rewriter) const override {
     Type retType = getTypeConverter()->convertType(op.getType());
     auto value = adaptor.getValue().dyn_cast<DenseElementsAttr>();
-    if (dyn_cast<RankedTensorType>(retType)) {
+    if (dyn_cast<RankedTensorType>(cast<ShapedType>(retType))) {
       assert(value);
       if (value.getElementType().isInteger(1) && value.isSplat())
         // Workaround until https://reviews.llvm.org/D133743 is included.
-        value = DenseElementsAttr::get(retType, value.getSplatValue<bool>());
+        value = DenseElementsAttr::get(cast<ShapedType>(retType), value.getSplatValue<bool>());
       else
         // This is a hack. We just want to add encoding
-        value = value.reshape(retType);
+        value = value.reshape(cast<ShapedType>(retType));
     }
     addNamedAttrs(
         rewriter.replaceOpWithNewOp<arith::ConstantOp>(op, retType, value),

@@ -181,7 +181,8 @@ public:
     }
 
     // Create tensor
-    Value constant = builder.create<arith::ConstantOp>(loc, attr);
+    Value constant =
+        builder.create<arith::ConstantOp>(loc, cast<TypedAttr>(attr));
     return builder.create<triton::SplatOp>(loc, otherTensorType, constant);
   }
 };

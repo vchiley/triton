@@ -40,10 +40,10 @@ DenseElementsAttr getConstantValue(Builder &builder, Attribute value,
   Type resType = bcast_res.getType();
   DenseElementsAttr res;
   if (auto denseValue = value.dyn_cast<DenseElementsAttr>()) {
-    res =
-        DenseElementsAttr::get(resType, denseValue.getSplatValue<Attribute>());
+    res = DenseElementsAttr::get(cast<ShapedType>(resType),
+                                 denseValue.getSplatValue<Attribute>());
   } else {
-    res = DenseElementsAttr::get(resType, value);
+    res = DenseElementsAttr::get(cast<ShapedType>(resType), value);
   }
   return res;
 }
