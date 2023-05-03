@@ -260,7 +260,7 @@ void StoreOp::build(::mlir::OpBuilder &builder, ::mlir::OperationState &state,
 //-- TransOp --
 mlir::LogicalResult mlir::triton::TransOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> location, ValueRange operands,
-    DictionaryAttr attributes, RegionRange regions,
+    DictionaryAttr attributes, OpaqueProperties, RegionRange regions,
     SmallVectorImpl<Type> &inferredReturnTypes) {
   // type is the same as the input
   auto argTy = operands[0].getType().cast<RankedTensorType>();
@@ -287,7 +287,7 @@ mlir::LogicalResult mlir::triton::TransOp::inferReturnTypes(
 //-- DotOp --
 mlir::LogicalResult mlir::triton::DotOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> location, ValueRange operands,
-    DictionaryAttr attributes, RegionRange regions,
+    DictionaryAttr attributes, OpaqueProperties, RegionRange regions,
     SmallVectorImpl<Type> &inferredReturnTypes) {
   // type is the same as the accumulator
   auto accTy = operands[2].getType().cast<RankedTensorType>();
@@ -355,7 +355,7 @@ void ReduceOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
 
 mlir::LogicalResult mlir::triton::ReduceOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> location, ValueRange operands,
-    DictionaryAttr attributes, RegionRange regions,
+    DictionaryAttr attributes, OpaqueProperties, RegionRange regions,
     SmallVectorImpl<Type> &inferredReturnTypes) {
   for (auto arg : operands) {
     auto argTy = arg.getType().cast<RankedTensorType>();
@@ -462,7 +462,7 @@ OpFoldResult SplatOp::fold(FoldAdaptor adaptor) {
 //-- ExpandDimsOp --
 mlir::LogicalResult mlir::triton::ExpandDimsOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attributes, RegionRange regions,
+    DictionaryAttr attributes, OpaqueProperties, RegionRange regions,
     SmallVectorImpl<Type> &inferredReturnTypes) {
   // infer shape
   auto arg = operands[0];
