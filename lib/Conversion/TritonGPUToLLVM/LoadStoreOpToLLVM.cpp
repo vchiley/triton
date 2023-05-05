@@ -133,7 +133,8 @@ struct LoadOpConversion
       PTXBuilder ptxBuilder;
 
       Value pred = mask ? maskElems[vecStart] : int_val(1, 1);
-
+      Value masking = getMask(valueTy, rewriter, loc);
+      pred = and_(pred, masking);
       const std::string readConstraint =
           (width == 64) ? "l" : ((width == 32) ? "r" : "c");
       const std::string writeConstraint =
