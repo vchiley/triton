@@ -1611,6 +1611,69 @@ def test_reduce_2d(M, N, src_layout, device='cuda'):
     np.testing.assert_allclose(z_ref, z_tri.cpu().numpy(), rtol=0.01, atol=1e-3)
 
 
+def test_temp():
+    ir = """
+#blocked = #triton_gpu.blocked<{sizePerThread = [1, 1], threadsPerWarp = [8, 4], warpsPerCTA = [1, 4], order = [0, 1]}>
+#blocked1 = #triton_gpu.blocked<{sizePerThread = [1, 4], threadsPerWarp = [1, 32], warpsPerCTA = [1, 4], order = [1, 0]}>
+module attributes {"triton_gpu.num-warps" = 4 : i32} {
+  tt.func public @triton__0d1d(%arg0: !tt.ptr<f32> {tt.divisibility = 16 : i32}, %arg1: !tt.ptr<f32> {tt.divisibility = 16 : i32}) {
+    %cst = arith.constant dense<0.000000e+00> : tensor<8x1xf32, #blocked>
+    %cst_0 = arith.constant dense<1.000000e+00> : tensor<8x1xf32, #blocked>
+    %c8_i32 = arith.constant 8 : i32
+    %0 = tt.get_program_id {axis = 0 : i32} : i32
+    %1 = arith.muli %0, %c8_i32 : i32
+    %2 = tt.make_range {end = 8 : i32, start = 0 : i32} : tensor<8xi32, #triton_gpu.slice<{dim = 1, parent = #blocked}>>
+    %3 = tt.make_range {end = 8 : i32, start = 0 : i32} : tensor<8xi32, #triton_gpu.slice<{dim = 1, parent = #blocked1}>>
+    %4 = tt.expand_dims %2 {axis = 1 : i32} : (tensor<8xi32, #triton_gpu.slice<{dim = 1, parent = #blocked}>>) -> tensor<8x1xi32, #blocked>
+    %5 = tt.expand_dims %3 {axis = 1 : i32} : (tensor<8xi32, #triton_gpu.slice<{dim = 1, parent = #blocked1}>>) -> tensor<8x1xi32, #blocked1>
+    %6 = tt.splat %1 : (i32) -> tensor<8x1xi32, #blocked>
+    %7 = tt.splat %1 : (i32) -> tensor<8x1xi32, #blocked1>
+    %8 = arith.addi %6, %4 : tensor<8x1xi32, #blocked>
+    %9 = arith.addi %7, %5 : tensor<8x1xi32, #blocked1>
+    %10 = tt.splat %arg0 : (!tt.ptr<f32>) -> tensor<8x1x!tt.ptr<f32>, #blocked>
+    %11 = tt.splat %arg0 : (!tt.ptr<f32>) -> tensor<8x1x!tt.ptr<f32>, #blocked1>
+    %12 = tt.addptr %10, %8 : tensor<8x1x!tt.ptr<f32>, #blocked>, tensor<8x1xi32, #blocked>
+    %13 = tt.addptr %11, %9 : tensor<8x1x!tt.ptr<f32>, #blocked1>, tensor<8x1xi32, #blocked1>
+    %14 = tt.load %12 {cache = 1 : i32, evict = 1 : i32, isVolatile = false} : tensor<8x1xf32, #blocked>
+    %15 = tt.load %13 {cache = 1 : i32, evict = 1 : i32, isVolatile = false} : tensor<8x1xf32, #blocked1>
+    %16 = arith.addf %14, %cst_0 : tensor<8x1xf32, #blocked>
+    tt.store %12, %16 {cache = 1 : i32, evict = 1 : i32} : tensor<8x1xf32, #blocked>
+    %17 = "triton_gpu.cmpf"(%14, %cst) {predicate = 1 : i64} : (tensor<8x1xf32, #blocked>, tensor<8x1xf32, #blocked>) -> tensor<8x1xi1, #blocked>
+    tt.assert %17, "", "/root/code/triton/python/test/unit/language/test_core.py", "triton_", 1632 : tensor<8x1xi1, #blocked>
+    %18 = tt.make_range {end = 512 : i32, start = 0 : i32} : tensor<512xi32, #triton_gpu.slice<{dim = 0, parent = #blocked1}>>
+    %19 = tt.expand_dims %18 {axis = 0 : i32} : (tensor<512xi32, #triton_gpu.slice<{dim = 0, parent = #blocked1}>>) -> tensor<1x512xi32, #blocked1>
+    %20 = tt.broadcast %15 : (tensor<8x1xf32, #blocked1>) -> tensor<8x512xf32, #blocked1>
+    %21 = tt.broadcast %19 : (tensor<1x512xi32, #blocked1>) -> tensor<8x512xi32, #blocked1>
+    %22 = arith.sitofp %21 : tensor<8x512xi32, #blocked1> to tensor<8x512xf32, #blocked1>
+    %23 = arith.addf %20, %22 : tensor<8x512xf32, #blocked1>
+    %24 = "tt.reduce"(%23) ({
+    ^bb0(%arg2: f32, %arg3: f32):
+      %28 = arith.addf %arg2, %arg3 : f32
+      tt.reduce.return %28 : f32
+    }) {axis = 0 : i32} : (tensor<8x512xf32, #blocked1>) -> tensor<512xf32, #triton_gpu.slice<{dim = 0, parent = #blocked1}>>
+    %25 = tt.expand_dims %24 {axis = 0 : i32} : (tensor<512xf32, #triton_gpu.slice<{dim = 0, parent = #blocked1}>>) -> tensor<1x512xf32, #blocked1>
+    %26 = tt.splat %arg1 : (!tt.ptr<f32>) -> tensor<1x512x!tt.ptr<f32>, #blocked1>
+    %27 = tt.addptr %26, %19 : tensor<1x512x!tt.ptr<f32>, #blocked1>, tensor<1x512xi32, #blocked1>
+    tt.store %27, %25 {cache = 1 : i32, evict = 1 : i32} : tensor<1x512xf32, #blocked1>
+    tt.return
+  }
+}
+"""
+    import tempfile
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.ttgir') as f:
+        f.write(ir)
+        f.flush()
+        triton_ = triton.compile(f.name)
+    xblock, rblock = 8, 512
+    grid_size = 1000
+
+    for _ in range(100):
+        buf7 = torch.zeros(grid_size * xblock, device="cuda")
+        rout = torch.empty(rblock, device="cuda")
+        triton_[(grid_size, 1, 1)](buf7, rout)
+        torch.cuda.synchronize()
+
+
 def test_generic_reduction(device='cuda'):
 
     @triton.jit
