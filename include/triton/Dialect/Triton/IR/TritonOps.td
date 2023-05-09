@@ -601,6 +601,8 @@ def CallOp : TT_Op<"call", [CallOpInterface, /*MemRefsNormalizable, */DeclareOpI
     CallInterfaceCallable getCallableForCallee() {
       return (*this)->getAttrOfType<SymbolRefAttr>("callee");
     }
+    /// Set the callee from the callable
+    void setCalleeFromCallable(CallInterfaceCallable);
   }];
 
   let assemblyFormat = [{

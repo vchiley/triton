@@ -4,6 +4,7 @@
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/FunctionInterfaces.h"
 #include "mlir/IR/OperationSupport.h"
+#include "mlir/Interfaces/CallInterfaces.h"
 #include "triton/Dialect/Triton/IR/Dialect.h"
 #include "triton/Dialect/Triton/IR/Types.h"
 
@@ -682,6 +683,15 @@ triton::CallOp::verifySymbolUses(mlir::SymbolTableCollection &symbolTable) {
     }
 
   return success();
+}
+
+void triton::CallOp::setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
+  // Direct call
+  if ((*this)->getAttrOfType<mlir::SymbolRefAttr>("callee")) {
+    (*this)->setAttr("callee", callee.get<mlir::SymbolRefAttr>());
+  }
+  // Indirect call, callee Value is the first operand.
+  return setOperand(0, callee.get<mlir::Value>());
 }
 
 // -- ReturnOp --
