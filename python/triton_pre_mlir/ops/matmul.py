@@ -1,7 +1,7 @@
 import torch
 
-import triton
-import triton.language as tl
+import triton_pre_mlir as triton
+import triton_pre_mlir.language as tl
 from .matmul_perf_model import early_config_prune, estimate_matmul_time
 
 

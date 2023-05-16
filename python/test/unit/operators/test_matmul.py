@@ -3,8 +3,8 @@ import itertools
 import pytest
 import torch
 
-import triton
-import triton._C.libtriton.triton as _triton
+import triton_pre_mlir as triton
+import triton_pre_mlir._C.libtriton.triton as _triton
 
 
 @pytest.mark.parametrize(

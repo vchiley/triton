@@ -1,6 +1,6 @@
 import torch
 
-import triton
+import triton_pre_mlir as triton
 
 confs = [
     triton.testing.Benchmark(

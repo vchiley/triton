@@ -3,7 +3,7 @@ import inspect
 import os
 import sys
 
-import triton
+import triton_pre_mlir as triton
 
 
 def run_all(result_dir, names):

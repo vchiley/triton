@@ -31,8 +31,8 @@ whose state is generally composed of a bit mask tensor of the same shape as the 
 import tabulate
 import torch
 
-import triton
-import triton.language as tl
+import triton_pre_mlir as triton
+import triton_pre_mlir.language as tl
 
 
 @triton.jit

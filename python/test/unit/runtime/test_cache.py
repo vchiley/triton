@@ -7,9 +7,9 @@ from collections import namedtuple
 import pytest
 import torch
 
-import triton
-import triton.language as tl
-from triton.runtime.jit import JITFunction
+import triton_pre_mlir as triton
+import triton_pre_mlir.language as tl
+from triton_pre_mlir.runtime.jit import JITFunction
 
 tmpdir = ".tmp"
 

@@ -3,8 +3,8 @@ import pytest
 import scipy.stats
 import torch
 
-import triton
-import triton.language as tl
+import triton_pre_mlir as triton
+import triton_pre_mlir.language as tl
 
 #####################################
 # Reference Philox Implementation

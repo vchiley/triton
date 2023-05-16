@@ -4,9 +4,9 @@ from enum import Enum
 from functools import wraps
 from typing import List
 
-import triton
+import triton_pre_mlir as triton
 from . import semantic
-from triton._C.libtriton.triton import ir
+from triton_pre_mlir._C.libtriton.triton import ir
 
 
 def _to_tensor(x, builder):

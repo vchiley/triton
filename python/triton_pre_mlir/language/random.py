@@ -1,4 +1,4 @@
-import triton
+import triton_pre_mlir as triton
 from . import core as tl
 
 PHILOX_KEY_A: tl.constexpr = -1640531527  # 0x9E3779B9

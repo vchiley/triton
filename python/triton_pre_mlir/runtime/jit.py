@@ -11,8 +11,8 @@ from collections import defaultdict, namedtuple
 
 import torch
 
-import triton
-from triton.utils import MockTensor
+import triton_pre_mlir as triton
+from triton_pre_mlir.utils import MockTensor
 
 try:
     from torch._C import _cuda_getCurrentRawStream as get_cuda_stream

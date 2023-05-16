@@ -20,8 +20,8 @@ import setuptools
 import torch
 from filelock import FileLock
 
-import triton
-import triton._C.libtriton.triton as _triton
+import triton_pre_mlir as triton
+import triton_pre_mlir._C.libtriton.triton as _triton
 from .tools.disasm import extract
 
 

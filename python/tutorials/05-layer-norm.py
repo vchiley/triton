@@ -5,8 +5,8 @@ Layer Normalization
 
 import torch
 
-import triton
-import triton.language as tl
+import triton_pre_mlir as triton
+import triton_pre_mlir.language as tl
 
 try:
     # This is https://github.com/NVIDIA/apex, NOT the apex on PyPi, so it

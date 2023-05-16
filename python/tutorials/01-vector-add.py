@@ -14,8 +14,8 @@ In this tutorial, you will write a simple vector addition using Triton and learn
 
 import torch
 
-import triton
-import triton.language as tl
+import triton_pre_mlir as triton
+import triton_pre_mlir.language as tl
 
 
 @triton.jit

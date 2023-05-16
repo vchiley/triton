@@ -8,10 +8,10 @@ import pytest
 import torch
 from numpy.random import RandomState
 
-import triton
-import triton._C.libtriton.triton as _triton
-import triton.language as tl
-from triton.runtime.jit import JITFunction, TensorWrapper, reinterpret
+import triton_pre_mlir as triton
+import triton_pre_mlir._C.libtriton.triton as _triton
+import triton_pre_mlir.language as tl
+from triton_pre_mlir.runtime.jit import JITFunction, TensorWrapper, reinterpret
 
 int_dtypes = ['int8', 'int16', 'int32', 'int64']
 uint_dtypes = ['uint8', 'uint16', 'uint32', 'uint64']

@@ -4,9 +4,9 @@ import sys
 import pytest
 import torch
 
-import triton
-import triton.language as tl
-from triton.testing import get_dram_gbps, get_max_tensorcore_tflops
+import triton_pre_mlir as triton
+import triton_pre_mlir.language as tl
+from triton_pre_mlir.testing import get_dram_gbps, get_max_tensorcore_tflops
 
 DEVICE_NAME = 'v100'
 

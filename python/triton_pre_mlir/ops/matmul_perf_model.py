@@ -2,9 +2,9 @@ import heapq
 
 import torch
 
-import triton
-import triton._C.libtriton.triton as _triton
-from triton.testing import get_dram_gbps, get_max_simd_tflops, get_max_tensorcore_tflops
+import triton_pre_mlir as triton
+import triton_pre_mlir._C.libtriton.triton as _triton
+from triton_pre_mlir.testing import get_dram_gbps, get_max_simd_tflops, get_max_tensorcore_tflops
 
 
 def get_tensorcore_tflops(backend, device, num_ctas, num_warps, dtype):
