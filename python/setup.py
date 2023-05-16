@@ -149,25 +149,25 @@ class CMakeBuild(build_ext):
 
 
 setup(
-    name="triton",
+    name="triton_pre_mlir",
     version="2.0.0",
     author="Philippe Tillet",
     author_email="phil@openai.com",
     description="A language and compiler for custom Deep Learning operations",
     long_description="",
-    packages=["triton", "triton/_C", "triton/language", "triton/runtime", "triton/tools", "triton/ops", "triton/ops/blocksparse"],
+    packages=["triton_pre_mlir", "triton_pre_mlir/_C", "triton_pre_mlir/language", "triton_pre_mlir/runtime", "triton_pre_mlir/tools", "triton_pre_mlir/ops", "triton_pre_mlir/ops/blocksparse"],
     install_requires=[
         "cmake",
         "filelock",
         "torch",
     ],
     package_data={
-        "triton/ops": ["*.c"],
-        "triton/ops/blocksparse": ["*.c"],
-        "triton/language": ["*.bc"],
+        "triton_pre_mlir/ops": ["*.c"],
+        "triton_pre_mlir/ops/blocksparse": ["*.c"],
+        "triton_pre_mlir/language": ["*.bc"],
     },
     include_package_data=True,
-    ext_modules=[CMakeExtension("triton", "triton/_C/")],
+    ext_modules=[CMakeExtension("triton_pre_mlir", "triton_pre_mlir/_C/")],
     cmdclass={"build_ext": CMakeBuild},
     zip_safe=False,
     # for PyPI
