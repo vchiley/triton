@@ -53,7 +53,7 @@ class DependenciesFinder(ast.NodeVisitor):
             return
         if inspect.isbuiltin(func):
             return
-        if func.__module__ and func.__module__.startswith('triton.'):
+        if func.__module__ and func.__module__.startswith('triton_pre_mlir.'):
             return
         assert isinstance(func, JITFunction)
         if func.hash is None:
