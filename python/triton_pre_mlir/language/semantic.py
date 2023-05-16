@@ -3,7 +3,7 @@ from __future__ import annotations  # remove after python 3.11
 from typing import List, Optional, Tuple
 
 from . import core as tl
-from triton._C.libtriton.triton import ir
+from triton_pre_mlir._C.libtriton.triton import ir
 
 
 # Create custom exception that prints message "hello"
