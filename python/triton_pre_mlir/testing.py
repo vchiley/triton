@@ -6,11 +6,11 @@ from contextlib import contextmanager
 
 import torch
 
-import triton._C.libtriton.triton as _triton
+import triton_pre_mlir._C.libtriton.triton as _triton
 from .compiler import OutOfResources
 
 try:
-    import triton._C.libtriton.cutlass as _cutlass
+    import triton_pre_mlir._C.libtriton.cutlass as _cutlass
     has_cutlass = True
 except ImportError:
     _cutlass = None
