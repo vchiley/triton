@@ -462,6 +462,11 @@ void init_triton_codegen(py::module &&m) {
               size_t major = cuGetInfo<CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR>(dev);
               size_t minor = cuGetInfo<CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR>(dev);
               cc = major*10 + minor;
+
+              // Doesn't support cc > 86
+              if (cc > 86) {
+                cc = 86;
+              }
             }
             int version;
             std::string ptxas_path = drv::path_to_ptxas(version);
