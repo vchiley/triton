@@ -148,8 +148,9 @@ namespace triton
 
     int vptx(int version)
     {
-      if (version >= 11040)
-        return 78;
+      if (version >= 12010) return 80;
+      if (version >= 11080) return 78;
+      if (version >= 11040) return 74;
       // if(version >= 11030) return 73;
       // if(version >= 11020) return 72;
       // if(version >= 11010) return 71;
