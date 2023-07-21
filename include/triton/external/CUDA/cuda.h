@@ -1074,7 +1074,9 @@ typedef enum CUjit_target_enum
     CU_TARGET_COMPUTE_72 = 72,       /**< Compute device class 7.2.*/
     CU_TARGET_COMPUTE_75 = 75,       /**< Compute device class 7.5.*/
     CU_TARGET_COMPUTE_80 = 80,       /**< Compute device class 8.0.*/
-    CU_TARGET_COMPUTE_86 = 86        /**< Compute device class 8.6.*/
+    CU_TARGET_COMPUTE_86 = 86,       /**< Compute device class 8.6.*/
+    CU_TARGET_COMPUTE_89 = 89,       /**< Compute device class 8.9. not tested*/
+    CU_TARGET_COMPUTE_90 = 90        /**< Compute device class 9.0.*/
 } CUjit_target;
 
 /**

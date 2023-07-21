@@ -113,7 +113,7 @@ class CMakeBuild(build_ext):
             self.build_extension(ext)
 
     def build_extension(self, ext):
-        triton_cache_path = os.path.join(os.environ["HOME"], ".triton")
+        triton_cache_path = os.path.join(os.environ["HOME"], ".triton_pre_mlir")
         thirdparty_cmake_args = get_thirdparty_packages(triton_cache_path)
         extdir = os.path.abspath(os.path.dirname(self.get_ext_fullpath(ext.path)))
         # create build directories
